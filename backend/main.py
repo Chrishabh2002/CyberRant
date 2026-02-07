@@ -14,8 +14,12 @@ from services.media_orchestrator import MediaOrchestrator
 app = FastAPI(title="CyberRant Agent API")
 
 # Ensure media directory exists and serve it
-os.makedirs("media/audio", exist_ok=True)
-os.makedirs("media/video", exist_ok=True)
+try:
+    os.makedirs("media/audio", exist_ok=True)
+    os.makedirs("media/video", exist_ok=True)
+except Exception as e:
+    print(f"Warning: Could not create media directories: {e}")
+
 app.mount("/media", StaticFiles(directory="media"), name="media")
 
 # Enable CORS for the frontend testing console

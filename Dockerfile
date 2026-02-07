@@ -25,10 +25,16 @@ COPY backend/ .
 
 # Copy built frontend assets to be served by FastAPI or Nginx
 # For this simplified enterprise setup, we assume FastAPI serves the build folder
+# Copy built frontend assets to be served by FastAPI or Nginx
 COPY --from=frontend-build /app/frontend/dist ./static
 
-# Security: Run as non-privileged user
+# Security: Create non-privileged user
 RUN useradd -m cyberrant
+
+# Ensure media storage directories exist and are writable
+RUN mkdir -p media/audio media/video && chown -R cyberrant:cyberrant /app
+
+# Switch to the user
 USER cyberrant
 
 # Enterprise Configuration
