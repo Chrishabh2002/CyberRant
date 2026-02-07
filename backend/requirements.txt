@@ -1,26 +1,16 @@
 fastapi<0.110
 uvicorn==0.27.1
 
-# Data validation (NO Rust)
 pydantic==1.10.13
-
-# Forms / uploads
 python-multipart==0.0.9
-
-# HTTP & env
 requests==2.31.0
-python-dotenv==1.0.1
 
-# Auth
 passlib[bcrypt]==1.7.4
 python-jose[cryptography]==3.3.0
+python-dotenv==1.0.1
 
-# AI / LLM
 openai==1.13.3
-
-# Audio (safe)
 gTTS==2.5.4
 
-# Video rendering (server-safe)
 opencv-python-headless==4.9.0.80
 numpy==1.26.4
