@@ -25,10 +25,11 @@ export const agentApi = {
         });
 
         if (!response.ok) {
+            const errorText = await response.text();
             if (response.status === 503) {
                 return { state: "SYSTEM_OFFLINE", message: "System is disarmed via Kill-Switch." };
             }
-            throw new Error(`API Error: ${response.statusText}`);
+            throw new Error(`API Error ${response.status}: ${errorText || response.statusText}`);
         }
 
         return await response.json();

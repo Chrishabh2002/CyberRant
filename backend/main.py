@@ -22,14 +22,22 @@ except Exception as e:
 
 app.mount("/media", StaticFiles(directory="media"), name="media")
 
-# Enable CORS for the frontend testing console
+# Enable CORS for broader environmental stability
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/ping")
+async def ping():
+    return {"status": "ok", "message": "CyberRant Intelligence Gateway is Online."}
+
+# Verification: Check for Critical API Keys
+if not os.getenv("OPENROUTER_API_KEY"):
+    print("CRITICAL WARNING: OPENROUTER_API_KEY is not set. AI Agents will be inoperative.")
 
 media_orchestrator = MediaOrchestrator()
 
