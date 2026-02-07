@@ -1,0 +1,39 @@
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Dependencies
+node_modules/
+jspm_packages/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+ENV/
+.env
+
+# Media Artifacts
+media/audio/
+media/video/
+backend/media/audio/
+backend/media/video/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS folders
+.DS_Store
+Thumbs.db
