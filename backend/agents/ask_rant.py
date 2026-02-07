@@ -55,4 +55,4 @@ class AskRantAgent(BaseAgent):
 
     def _retrieve_knowledge_base_context(self, query: str) -> str:
         # In production, this would call a Vector DB (Pinecone/Milvus)
-        return "Internal Knowledge: Log4j CVE-2021-44228 affects JNDI lookups via log messages. OWASP Top 10 2021 includes Broken Access Control, Cryptographic Failures, and Injection as top risks."
+        return "Internal Knowledge: Focus on data protection, strong access controls, and regular system hygiene. Security is a shared responsibility across the organization. Emphasize multi-layered defense and early detection of unusual patterns."
