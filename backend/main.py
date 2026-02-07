@@ -134,5 +134,11 @@ async def handle_approval(req: ApprovalRequest):
             
     return {"status": "ok", "state": AgentState.COMPLETED}
 
+# Serve static files from the distributed frontend (Production)
+if os.path.exists("static"):
+    # This mounts the static folder to the root. 
+    # html=True serves index.html at /
+    app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
