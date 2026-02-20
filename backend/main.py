@@ -26,44 +26,52 @@ async def lifespan(app: FastAPI):
     # Startup logic
     asyncio.create_task(simulate_ambient_intel())
     
-    # Automatically spawn the Local Execution Agent (Security Bridge)
-    # Robust Path Discovery: Check both parent and current directory (for flattened cloud deploys)
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    possible_paths = [
-        os.path.join(os.path.dirname(current_dir), "local_agent.py"),
-        os.path.join(current_dir, "local_agent.py")
-    ]
-    
-    lea_path = None
-    for p in possible_paths:
-        if os.path.exists(p):
-            lea_path = p
-            project_root = os.path.dirname(p)
-            break
+    async def dispatch_security_bridge():
+        """Background task to spawn the LEA once the server is ready."""
+        # Wait for the main server to be fully bound and listening
+        await asyncio.sleep(5)
+        
+        # Robust Path Discovery
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        possible_paths = [
+            os.path.join(os.path.dirname(current_dir), "local_agent.py"),
+            os.path.join(current_dir, "local_agent.py")
+        ]
+        
+        lea_path = None
+        for p in possible_paths:
+            if os.path.exists(p):
+                lea_path = p
+                project_root = os.path.dirname(p)
+                break
 
-    if lea_path:
-        # Give the main server a moment to bind to the port
-        await asyncio.sleep(3)
-        
-        print(f"[*] Dispatching Internal Security Bridge: {lea_path}")
-        # Wipe log for fresh run
-        with open("lea_bridge.log", "w") as f:
-            f.write(f"--- INTERNAL BRIDGE INITIALIZED {time.ctime()} ---\n")
+        if lea_path:
+            print(f"[*] Dispatching Autonomous Security Bridge: {lea_path}")
             
-        port = os.getenv("PORT", "8000")
-        # Use 127.0.0.1 for internal loopback. If that fails, the agent's retry logic 
-        # will keep trying until the gateway is reachable.
-        target_url = f"http://127.0.0.1:{port}"
-        
-        # Check if RENDER env is present to adjust PID management
-        subprocess.Popen([sys.executable, "-u", lea_path, target_url], 
-                         stdout=open("lea_bridge.log", "a"), 
-                         stderr=subprocess.STDOUT,
-                         cwd=project_root)
-        print(f"[+] Internal Security Bridge heartbeat engaged on {target_url}")
-        
+            port = os.getenv("PORT", "8000")
+            # In containers, 127.0.0.1 is most reliable for loopback
+            target_url = f"http://127.0.0.1:{port}"
+            
+            # Pipe output to both a log file AND the main process stdout for Render visibility
+            log_file = open("lea_bridge.log", "a")
+            log_file.write(f"\n--- BRIDGE DISPATCHED: {time.ctime()} ---\n")
+            
+            try:
+                subprocess.Popen(
+                    [sys.executable, "-u", lea_path, target_url], 
+                    stdout=log_file, 
+                    stderr=subprocess.STDOUT, # Merge stderr into the same log
+                    cwd=project_root
+                )
+                print(f"[+] Security Bridge logic engaged targeting {target_url}")
+            except Exception as e:
+                print(f"[!] Critical failure during bridge orchestration: {e}")
+
+    # Fire and forget the bridge dispatcher
+    asyncio.create_task(dispatch_security_bridge())
+    
     yield
-    # Shutdown logic (optional)
+    # Shutdown logic
     print("[*] Application context terminating.")
 
 fastapi_app = FastAPI(title="CyberRant Agent API", lifespan=lifespan)
