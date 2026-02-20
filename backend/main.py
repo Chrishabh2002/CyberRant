@@ -341,7 +341,7 @@ async def get_agent_status(trace_id: str):
 
 # Serve static files from the distributed frontend (Production)
 if os.path.exists("static"):
-    app.mount("/", StaticFiles(directory="static", html=True), name="static")
+    fastapi_app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 async def simulate_ambient_intel():
     """Simulates the agent's autonomous thinking and world-monitoring."""
