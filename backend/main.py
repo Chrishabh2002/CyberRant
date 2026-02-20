@@ -48,11 +48,11 @@ async def lifespan(app: FastAPI):
     # Shutdown logic (optional)
     print("[*] Application context terminating.")
 
-app = FastAPI(title="CyberRant Agent API", lifespan=lifespan)
+fastapi_app = FastAPI(title="CyberRant Agent API", lifespan=lifespan)
 
 # Initialize Socket.io for LEA connection
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
-sio_app = socketio.ASGIApp(sio, app)
+app = socketio.ASGIApp(sio, fastapi_app)
 
 # Ensure media directory exists and serve it
 try:
@@ -61,10 +61,10 @@ try:
 except Exception as e:
     print(f"Warning: Could not create media directories: {e}")
 
-app.mount("/media", StaticFiles(directory="media"), name="media")
+fastapi_app.mount("/media", StaticFiles(directory="media"), name="media")
 
 # Enable CORS
-app.add_middleware(
+fastapi_app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
@@ -72,7 +72,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/ping")
+@fastapi_app.get("/ping")
 async def ping():
     return {
         "status": "ok", 
@@ -117,7 +117,7 @@ async def ecosystem_pulse(sid, data):
     # Broadcast to all frontend clients
     await sio.emit("ecosystem_update", ecosystem_state)
 
-@app.get("/agent/ecosystem")
+@fastapi_app.get("/agent/ecosystem")
 async def get_ecosystem():
     return ecosystem_state
 
@@ -196,7 +196,7 @@ async def sandbox_files_report(sid, data):
         trace_store[trace_id]["sandbox_files"] = data.get("files", [])
         print(f"[+] Sandbox inventory updated for {trace_id}")
 
-@app.get("/agent/sandbox/{trace_id}")
+@fastapi_app.get("/agent/sandbox/{trace_id}")
 async def fetch_sandbox(trace_id: str):
     if not connected_lea_sid:
         return {"error": "LEA Offline"}
@@ -210,7 +210,7 @@ async def disconnect(sid):
         connected_lea_sid = None
         print(f"[!] Local Execution Agent Disconnected: {sid}")
 
-@app.post("/agent/execute")
+@fastapi_app.post("/agent/execute")
 async def execute_agent(req: ExecuteRequest, background_tasks: BackgroundTasks):
     if os.getenv("SYSTEM_STATUS") == "DISARMED":
         return {"state": "BLOCKED", "message": "System is currently DISARMED."}
@@ -242,7 +242,7 @@ async def execute_agent(req: ExecuteRequest, background_tasks: BackgroundTasks):
     trace_store[trace_id] = result
     return result
 
-@app.post("/agent/approval")
+@fastapi_app.post("/agent/approval")
 async def handle_approval(req: ApprovalRequest):
     if req.trace_id not in trace_store:
         raise HTTPException(status_code=404, detail="Trace not found")
@@ -317,7 +317,7 @@ async def handle_approval(req: ApprovalRequest):
             "trace_id": req.trace_id
         }
 
-@app.get("/agent/status/{trace_id}")
+@fastapi_app.get("/agent/status/{trace_id}")
 async def get_agent_status(trace_id: str):
     if trace_id in trace_store:
         res = trace_store[trace_id].copy()
@@ -371,4 +371,4 @@ async def simulate_ambient_intel():
 # Lifespan handles startup now
 
 if __name__ == "__main__":
-    uvicorn.run(sio_app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
