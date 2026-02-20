@@ -2,56 +2,56 @@ import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { agentApi } from '../api/agentApi';
+import TerminalView from './TerminalView';
+import TaskResolution from './TaskResolution';
+import MissionControl from './MissionControl';
 
 export default function ResponseViewer({ response }) {
     const [showTechnical, setShowTechnical] = useState(false);
     const [responseState, setResponseState] = useState(response?.state || 'IDLE');
     const [mediaStatus, setMediaStatus] = useState(response?.media_status || null);
     const [mediaAssets, setMediaAssets] = useState(response?.media_assets || null);
+    const [executionLogs, setExecutionLogs] = useState(response?.logs || []);
+    const [activeTab, setActiveTab] = useState('BRIEFING'); // BRIEFING | TERMINAL
     const pollInterval = useRef(null);
+
+    const [fullResponse, setFullResponse] = useState(response);
 
     // Sync state when initial response changes
     useEffect(() => {
+        setFullResponse(response);
         setResponseState(response?.state || 'IDLE');
         setMediaStatus(response?.media_status || null);
         setMediaAssets(response?.media_assets || null);
+        setExecutionLogs(response?.logs || []);
+
+        // Auto-switch to terminal if executing
+        if (response?.state === 'EXECUTING') {
+            setActiveTab('TERMINAL');
+        } else {
+            setActiveTab('BRIEFING');
+        }
     }, [response]);
 
-    // Polling logic for PENDING media
+    // Media & Assets Sync
     useEffect(() => {
-        const isPending = (status) => status === 'QUEUED' || status === 'PROCESSING' || status === 'PENDING';
-        const needsPolling = mediaStatus &&
-            (isPending(mediaStatus.audio_status) || isPending(mediaStatus.video_status));
+        if (response?.media_status) {
+            setMediaStatus(response.media_status);
+            const { audio_status, video_status, audio_url, video_url } = response.media_status;
+            const isPendingMedia = (s) => s === 'QUEUED' || s === 'PROCESSING' || s === 'PENDING';
 
-        if (needsPolling && response?.trace_id) {
-            pollInterval.current = setInterval(async () => {
-                const statusUpdate = await agentApi.getStatus(response.trace_id);
-                if (statusUpdate && statusUpdate.media_status) {
-                    const { audio_status, video_status, audio_url, video_url, overall_state } = statusUpdate.media_status;
-
-                    setMediaStatus(statusUpdate.media_status);
-                    if (overall_state) setResponseState(overall_state);
-
-                    const isDone = !isPending(audio_status) && !isPending(video_status);
-                    if (isDone) {
-                        clearInterval(pollInterval.current);
-                        if (audio_url || video_url) {
-                            setMediaAssets({
-                                audio_url: audio_url ? `${agentApi.API_BASE_URL}${audio_url}?t=${Date.now()}` : null,
-                                video_url: video_url ? `${agentApi.API_BASE_URL}${video_url}?t=${Date.now()}` : null
-                            });
-                        }
-                    }
-                }
-            }, 2500);
+            if (!isPendingMedia(audio_status) && !isPendingMedia(video_status) && (audio_url || video_url)) {
+                setMediaAssets({
+                    audio_url: audio_url ? `${agentApi.API_BASE_URL}${audio_url}?t=${Date.now()}` : null,
+                    video_url: video_url ? `${agentApi.API_BASE_URL}${video_url}?t=${Date.now()}` : null
+                });
+            }
         }
+    }, [response?.media_status]);
 
-        return () => clearInterval(pollInterval.current);
-    }, [mediaStatus, response?.trace_id]);
+    if (!fullResponse) return null;
 
-    if (!response) return null;
-
-    const { state: originalState, message, output, trace_id, severity, error } = response;
+    const { state: originalState, message, output, trace_id, severity, error } = fullResponse;
     const state = responseState || originalState;
 
     // Normalize content (backend uses 'message' or 'output')
@@ -64,7 +64,9 @@ export default function ResponseViewer({ response }) {
         "TEXT READY": { banner: "bg-blue-50 border-blue-200 text-blue-800", title: "Intelligence Captured", icon: "📄" },
         "MEDIA READY": { banner: "bg-green-50 border-green-200 text-green-800", title: "Operational Briefing Enhanced", icon: "✅" },
         COMPLETED: { banner: "bg-green-50 border-green-200 text-green-800", title: "Briefing Finalized", icon: "✅" },
-        AWAITING_APPROVAL: { banner: "bg-yellow-50 border-yellow-200 text-yellow-800", title: "Manual Review Required", icon: "🔑" }
+        AWAITING_APPROVAL: { banner: "bg-amber-50 border-amber-200 text-amber-900", title: "Operator Signing Required", icon: "🛡️" },
+        EXECUTING: { banner: "bg-red-50 border-red-200 text-red-800", title: "Mission Dispatched", icon: "⚡" },
+        FAILED: { banner: "bg-slate-900 border-white/10 text-slate-400", title: "Mission Standby", icon: "⏸️" }
     };
 
     const config = stateConfig[state?.toUpperCase()] || { banner: "bg-slate-50 border-slate-200", title: "System Insight", icon: "📋" };
@@ -73,89 +75,129 @@ export default function ResponseViewer({ response }) {
 
     return (
         <div className="mt-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* User Facing View */}
-            <div className={`p-8 rounded-[2rem] border-[3px] shadow-sm ${config.banner} transition-all duration-700`}>
-                <div className="flex items-center gap-4 mb-4">
-                    <div className="w-12 h-12 rounded-2xl bg-white shadow-xl flex items-center justify-center text-2xl">
-                        {config.icon}
-                    </div>
-                    <div className="flex flex-col flex-1">
-                        <div className="flex items-center justify-between">
-                            <h3 className="font-black text-xs uppercase tracking-[0.3em] font-sans">{config.title}</h3>
-                            {severity && (
-                                <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest border ${severity === 'CRITICAL' ? 'bg-purple-50 text-purple-700 border-purple-100' :
+            {/* Tab Navigation */}
+            <div className="flex items-center gap-2 px-1">
+                <button
+                    onClick={() => setActiveTab('BRIEFING')}
+                    className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'BRIEFING' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                    Strategic Briefing
+                </button>
+                <button
+                    onClick={() => setActiveTab('TERMINAL')}
+                    className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'TERMINAL' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                    Live Terminal
+                    {state === 'EXECUTING' && <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />}
+                </button>
+            </div>
+
+            {/* Content Area */}
+            {activeTab === 'BRIEFING' ? (
+                <div className={`p-8 rounded-[2rem] border-[3px] shadow-sm ${config.banner} transition-all duration-700`}>
+                    <div className="flex items-center gap-4 mb-4">
+                        <div className="w-12 h-12 rounded-2xl bg-white shadow-xl flex items-center justify-center text-2xl">
+                            {config.icon}
+                        </div>
+                        <div className="flex flex-col flex-1">
+                            <div className="flex items-center justify-between">
+                                <h3 className="font-black text-xs uppercase tracking-[0.3em] font-sans">{config.title}</h3>
+                                {severity && (
+                                    <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest border ${severity === 'CRITICAL' ? 'bg-purple-50 text-purple-700 border-purple-100' :
                                         severity === 'HIGH' ? 'bg-orange-50 text-orange-700 border-orange-100' :
                                             severity === 'MEDIUM' ? 'bg-blue-50 text-blue-700 border-blue-100' :
                                                 'bg-slate-50 text-slate-500 border-slate-100'
-                                    }`}>
-                                    Severity: {severity}
-                                </span>
-                            )}
-                        </div>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Primary Intelligence Dispatch</p>
-                    </div>
-                </div>
-
-                {/* Section A: Primary Intelligence */}
-                <div className="prose prose-sm max-w-none text-slate-800 leading-relaxed font-medium">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {error ? `**Notice:** Intelligence could not be fully compiled. ${error}` : mainContent}
-                    </ReactMarkdown>
-                </div>
-
-                {/* Section B & C: Multimodal & Controls */}
-                {(mediaAssets || mediaStatus) && (
-                    <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-6 p-8 bg-white/40 rounded-[2rem] backdrop-blur-xl border-2 border-white/50 border-dashed">
-                        {/* Audio Module */}
-                        <div className="space-y-4">
-                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest pl-1">Audio Briefing</p>
-                            {isPending(mediaStatus?.audio_status) ? (
-                                <MediaStatusCard label="Audio Rendering" type="AUDIO" />
-                            ) : mediaAssets?.audio_url ? (
-                                <div className="space-y-3">
-                                    <div className="flex items-center gap-2 px-4 py-2 bg-green-50 rounded-full border border-green-100 w-fit">
-                                        <span className="text-[10px] font-black text-green-600 uppercase tracking-widest">Audio Ready</span>
-                                    </div>
-                                    <audio controls className="w-full h-12 rounded-2xl shadow-inner bg-white/50">
-                                        <source src={mediaAssets.audio_url} type="audio/mpeg" />
-                                    </audio>
-                                </div>
-                            ) : mediaStatus?.audio_status === 'FAILED' ? (
-                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                    <p className="text-[10px] font-bold text-slate-500 italic">Media summary unavailable. Text briefing is complete.</p>
-                                </div>
-                            ) : null}
-                        </div>
-
-                        {/* Video Module */}
-                        <div className="space-y-4">
-                            <p className="text-[10px] font-black text-purple-600 uppercase tracking-widest pl-1">Visual Summary</p>
-                            {isPending(mediaStatus?.video_status) ? (
-                                <MediaStatusCard label="Video Rendering" type="VIDEO" />
-                            ) : mediaAssets?.video_url ? (
-                                <div className="space-y-3">
-                                    <div className="flex items-center gap-2 px-4 py-2 bg-green-50 rounded-full border border-green-100 w-fit">
-                                        <span className="text-[10px] font-black text-green-600 uppercase tracking-widest">Video Ready</span>
-                                    </div>
-                                    <div className="rounded-2xl overflow-hidden border-2 border-white shadow-2xl">
-                                        <video controls className="w-full aspect-video bg-slate-900">
-                                            <source src={mediaAssets.video_url} type="video/mp4" />
-                                        </video>
-                                    </div>
-                                </div>
-                            ) : mediaStatus?.video_status === 'FAILED' ? (
-                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                    <p className="text-[10px] font-bold text-slate-500 italic">Media summary unavailable. Text briefing is complete.</p>
-                                </div>
-                            ) : (
-                                <div className="h-24 flex items-center justify-center bg-slate-100/50 rounded-2xl border-2 border-slate-50 border-dashed">
-                                    <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest italic">Media Optional</p>
-                                </div>
-                            )}
+                                        }`}>
+                                        Severity: {severity}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Primary Intelligence Dispatch</p>
                         </div>
                     </div>
-                )}
-            </div>
+
+                    {/* Section A: Primary Intelligence */}
+                    <div className="prose prose-sm max-w-none text-slate-800 leading-relaxed font-medium">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {error ? `**Notice:** Intelligence could not be fully compiled. ${error}` : mainContent}
+                        </ReactMarkdown>
+                        <TaskResolution response={response} />
+                    </div>
+
+                    {/* Mission Authorization Layer */}
+                    {state === 'AWAITING_APPROVAL' && (
+                        <div className="mt-10 animate-in slide-in-from-top-4 duration-700">
+                            <MissionControl
+                                traceId={trace_id}
+                                onDecision={(decision, result) => {
+                                    if (result) {
+                                        setFullResponse(result);
+                                        setResponseState(result.state);
+                                    } else {
+                                        if (decision === 'approve') setResponseState('EXECUTING');
+                                        else setResponseState('COMPLETED');
+                                    }
+                                }}
+                            />
+                        </div>
+                    )}
+
+                    {/* Section B & C: Multimodal & Controls */}
+                    {(mediaAssets || mediaStatus) && (
+                        <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-6 p-8 bg-white/40 rounded-[2rem] backdrop-blur-xl border-2 border-white/50 border-dashed">
+                            {/* Audio Module */}
+                            <div className="space-y-4">
+                                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest pl-1">Audio Briefing</p>
+                                {isPending(mediaStatus?.audio_status) ? (
+                                    <MediaStatusCard label="Audio Rendering" type="AUDIO" />
+                                ) : mediaAssets?.audio_url ? (
+                                    <div className="space-y-3">
+                                        <div className="flex items-center gap-2 px-4 py-2 bg-green-50 rounded-full border border-green-100 w-fit">
+                                            <span className="text-[10px] font-black text-green-600 uppercase tracking-widest">Audio Ready</span>
+                                        </div>
+                                        <audio controls className="w-full h-12 rounded-2xl shadow-inner bg-white/50">
+                                            <source src={mediaAssets.audio_url} type="audio/mpeg" />
+                                        </audio>
+                                    </div>
+                                ) : mediaStatus?.audio_status === 'FAILED' ? (
+                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                        <p className="text-[10px] font-bold text-slate-500 italic">Media summary unavailable. Text briefing is complete.</p>
+                                    </div>
+                                ) : null}
+                            </div>
+
+                            {/* Video Module */}
+                            <div className="space-y-4">
+                                <p className="text-[10px] font-black text-purple-600 uppercase tracking-widest pl-1">Visual Summary</p>
+                                {isPending(mediaStatus?.video_status) ? (
+                                    <MediaStatusCard label="Video Rendering" type="VIDEO" />
+                                ) : mediaAssets?.video_url ? (
+                                    <div className="space-y-3">
+                                        <div className="flex items-center gap-2 px-4 py-2 bg-green-50 rounded-full border border-green-100 w-fit">
+                                            <span className="text-[10px] font-black text-green-600 uppercase tracking-widest">Video Ready</span>
+                                        </div>
+                                        <div className="rounded-2xl overflow-hidden border-2 border-white shadow-2xl">
+                                            <video controls className="w-full aspect-video bg-slate-900">
+                                                <source src={mediaAssets.video_url} type="video/mp4" />
+                                            </video>
+                                        </div>
+                                    </div>
+                                ) : mediaStatus?.video_status === 'FAILED' ? (
+                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                        <p className="text-[10px] font-bold text-slate-500 italic">Media summary unavailable. Text briefing is complete.</p>
+                                    </div>
+                                ) : (
+                                    <div className="h-24 flex items-center justify-center bg-slate-100/50 rounded-2xl border-2 border-slate-50 border-dashed">
+                                        <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest italic">Media Optional</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <TerminalView logs={executionLogs} status={state} />
+            )}
 
             {/* Technical Toggle */}
             <div className="flex justify-center">

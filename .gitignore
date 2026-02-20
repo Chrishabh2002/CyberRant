@@ -37,3 +37,10 @@ backend/media/video/
 # OS folders
 .DS_Store
 Thumbs.db
+
+# Logs and Operational Data
+*.log
+lea_bridge.log
+agent_sandbox/
+backend/lea_bridge.log
+backend/output.json

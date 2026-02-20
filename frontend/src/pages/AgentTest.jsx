@@ -3,6 +3,8 @@ import { agentApi } from '../api/agentApi';
 import StateBadge from '../components/StateBadge';
 import ResponseViewer from '../components/ResponseViewer';
 import ApprovalModal from '../components/ApprovalModal';
+import MissionDashboard from '../components/MissionDashboard';
+import CyberWorldMap from '../components/CyberWorldMap';
 
 const AGENTS = [
     { id: "ASK_RANT", name: "Ask Rant AI", type: "guidance" },
@@ -15,6 +17,21 @@ export default function AgentTest() {
     const [state, setState] = useState("IDLE");
     const [lastResponse, setLastResponse] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isLeaOnline, setIsLeaOnline] = useState(false);
+    const [showCommunity, setShowCommunity] = useState(true);
+
+    const TRENDING_TOPICS = [
+        { topic: "Zero-Trust Strategy", trend: "+42%", severity: "LOW" },
+        { topic: "API Key Leakages", trend: "+128%", severity: "CRITICAL" },
+        { topic: "Quantum Encryption", trend: "+12%", severity: "LOW" },
+        { topic: "Supply Chain Risk", trend: "+65%", severity: "HIGH" }
+    ];
+
+    const COMMUNITY_DISCUSSIONS = [
+        { user: "SOC_PRO_99", title: "New bypass for Port 443 discovered?", comments: 12 },
+        { user: "CYBER_GURU", title: "Best practices for EDR hardening", comments: 45 },
+        { user: "DEV_SEC", title: "CI/CD pipeline security metrics", comments: 8 }
+    ];
 
     const handleExecute = async () => {
         if (!query) return;
@@ -51,136 +68,200 @@ export default function AgentTest() {
         }
     };
 
-    return (
-        <div className="min-h-screen bg-[#fcfcfc] text-slate-900 selection:bg-red-100 selection:text-red-900 p-4 md:p-8 font-sans">
-            <div className="max-w-5xl mx-auto">
-                {/* Header Card */}
-                <div className="bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.02)] border border-slate-100 overflow-hidden mb-10 transition-all">
-                    <div className="bg-slate-950 px-10 py-8 flex flex-col md:flex-row justify-between items-center gap-6 border-b border-white/5">
-                        <div className="flex items-center gap-6">
-                            <div className="w-14 h-14 bg-red-600 rounded-3xl flex items-center justify-center shadow-[0_10px_20px_rgba(220,38,38,0.2)] transform -rotate-3 hover:rotate-0 transition-transform cursor-pointer">
-                                <span className="text-white text-3xl font-black italic tracking-tighter">!</span>
-                            </div>
-                            <div>
-                                <h1 className="text-3xl font-black italic tracking-tighter text-white">CYBER<span className="text-red-500">RANT</span> <span className="text-slate-600 font-medium not-italic ml-2 text-xl">V-LABS</span></h1>
-                                <p className="text-[10px] text-slate-500 uppercase tracking-[0.4em] font-black mt-1">Advanced Threat Intelligence • Agent Control</p>
-                            </div>
-                        </div>
-                        <StateBadge state={state} />
-                    </div>
+    // Global Status Polling for Live Missions
+    React.useEffect(() => {
+        let interval;
+        const isPending = (s) => ["EXECUTING", "PROCESSING", "PENDING", "QUEUED"].includes(s?.toUpperCase());
 
-                    <div className="p-10">
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 mb-12">
-                            {/* Agent Selection */}
-                            <div className="lg:col-span-8">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest pl-1">Target Intelligence Node</label>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    {AGENTS.map(agent => (
-                                        <button
-                                            key={agent.id}
-                                            onClick={() => setSelectedAgent(agent)}
-                                            className={`group relative p-5 rounded-[1.75rem] border-[3px] transition-all duration-500 ${selectedAgent.id === agent.id
-                                                ? "border-red-600 bg-red-50/20 shadow-[0_15px_30px_rgba(220,38,38,0.03)]"
-                                                : "border-slate-50 bg-slate-50/30 hover:border-slate-200"
-                                                }`}
-                                        >
-                                            <div className="flex items-center gap-4">
-                                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg transition-all ${selectedAgent.id === agent.id ? "bg-red-600 text-white shadow-lg shadow-red-500/20" : "bg-slate-200 text-slate-400 group-hover:bg-slate-300 group-hover:text-slate-500"}`}>
-                                                    {agent.id[0]}
-                                                </div>
-                                                <div className="text-left">
-                                                    <p className={`text-sm font-black tracking-tight ${selectedAgent.id === agent.id ? "text-slate-900" : "text-slate-500"}`}>{agent.name}</p>
-                                                    <p className="text-[10px] text-slate-400 font-black mt-0.5 tracking-wider uppercase opacity-70">
-                                                        {agent.type === 'guidance' ? '○ Learning Module' : '○ Action Protocol'}
-                                                    </p>
-                                                </div>
+        if (lastResponse?.trace_id && (isPending(state) || isPending(lastResponse.media_status?.audio_status))) {
+            interval = setInterval(async () => {
+                try {
+                    const updated = await agentApi.getStatus(lastResponse.trace_id);
+                    if (updated) {
+                        setLastResponse(updated);
+                        if (updated.state) setState(updated.state);
+
+                        const isNoLongerPending = !isPending(updated.state) &&
+                            !isPending(updated.media_status?.audio_status) &&
+                            !isPending(updated.media_status?.video_status);
+
+                        if (isNoLongerPending) {
+                            clearInterval(interval);
+                        }
+                    }
+                } catch (e) {
+                    console.error("Status Poll Error:", e);
+                }
+            }, 1000);
+        }
+        return () => clearInterval(interval);
+    }, [lastResponse?.trace_id, state]);
+
+    return (
+        <div className="min-h-screen bg-[#020617] text-slate-100 selection:bg-red-500/30 selection:text-white p-0 font-sans red-gradient-bg cyber-grid">
+            <div className="flex h-screen overflow-hidden">
+                {/* Left Sidebar - Community Intel */}
+                {showCommunity && (
+                    <aside className="w-80 border-r border-white/5 bg-slate-950/50 backdrop-blur-3xl overflow-y-auto hidden xl:block animate-in slide-in-from-left-10 duration-700">
+                        <div className="p-8 space-y-10">
+                            <div>
+                                <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] mb-6">Trending Analytics</h2>
+                                <div className="space-y-4">
+                                    {TRENDING_TOPICS.map((t, idx) => (
+                                        <div key={idx} className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-all cursor-pointer group">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-bold text-slate-300">{t.topic}</span>
+                                                <span className={`${t.trend.startsWith('+') ? 'text-emerald-400' : 'text-red-400'} text-[9px] font-black`}>{t.trend}</span>
                                             </div>
-                                        </button>
+                                            <div className={`h-1 w-full bg-slate-800 rounded-full mt-3 overflow-hidden`}>
+                                                <div className={`h-full ${t.severity === 'CRITICAL' ? 'bg-red-500' : 'bg-blue-500'} w-2/3`} />
+                                            </div>
+                                        </div>
                                     ))}
                                 </div>
                             </div>
 
-                            {/* Status Info */}
-                            <div className="lg:col-span-4">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest pl-1">System Entropy</label>
-                                <div className="p-6 bg-slate-950 rounded-[1.75rem] border border-white/5 shadow-2xl relative overflow-hidden group">
-                                    <div className="absolute top-0 right-0 p-2 opacity-10">
-                                        <div className="w-16 h-16 border-4 border-red-500 rounded-full animate-ping" />
-                                    </div>
-                                    <ul className="space-y-4 text-[10px] text-slate-400 font-black uppercase tracking-widest relative z-10">
-                                        <li className="flex items-center justify-between">
-                                            <span>Red-Line Policy</span>
-                                            <span className="text-emerald-500">ACTIVE</span>
-                                        </li>
-                                        <li className="flex items-center justify-between">
-                                            <span>HITL Buffer</span>
-                                            <span className="text-emerald-500">ENABLED</span>
-                                        </li>
-                                        <li className="flex items-center justify-between">
-                                            <span>Zero-Trust Auth</span>
-                                            <span className="text-red-500">LOCKED</span>
-                                        </li>
-                                    </ul>
+                            <div>
+                                <div className="flex items-center justify-between mb-6">
+                                    <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">Community Intel</h2>
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                                 </div>
+                                <div className="space-y-6">
+                                    {COMMUNITY_DISCUSSIONS.map((d, idx) => (
+                                        <div key={idx} className="space-y-2 group cursor-pointer">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-5 h-5 rounded-full bg-slate-800 text-[8px] flex items-center justify-center font-black text-slate-400">{d.user[0]}</div>
+                                                <span className="text-[9px] font-black text-slate-600 uppercase tracking-widest">{d.user}</span>
+                                            </div>
+                                            <p className="text-[11px] font-bold text-slate-400 group-hover:text-white transition-colors leading-relaxed">{d.title}</p>
+                                            <div className="flex items-center gap-3 text-[9px] font-black text-slate-600 uppercase">
+                                                <span>{d.comments} INSIGHTS</span>
+                                                <span className="w-1 h-1 rounded-full bg-slate-800" />
+                                                <span>2m ago</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button className="w-full mt-8 py-4 border border-white/5 rounded-2xl text-[9px] font-black text-slate-500 uppercase tracking-widest hover:bg-white/5 transition-all">
+                                    Browse All Discussions
+                                </button>
                             </div>
                         </div>
+                    </aside>
+                )}
 
-                        {/* Query Input */}
-                        <div className="mb-10 relative">
-                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-4 tracking-widest pl-1">Input Natural Language Intent</label>
-                            <div className="group relative">
-                                <textarea
-                                    className="w-full bg-slate-50/50 border-[3px] border-slate-50 focus:border-red-600 focus:bg-white p-8 rounded-[2rem] text-sm font-bold transition-all duration-500 outline-none min-h-[180px] shadow-inner text-slate-800 placeholder:text-slate-200 placeholder:font-black"
-                                    placeholder="e.g., 'Analyze the recent breach attempt at Node-C...'"
-                                    value={query}
-                                    onChange={(e) => setQuery(e.target.value)}
-                                    disabled={state === "SYSTEM_OFFLINE" || state === "PROCESSING"}
-                                />
-                                <div className="absolute bottom-6 right-8 text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] bg-white px-3 py-1 rounded-full border border-slate-50 shadow-sm">
-                                    {query.length} SYMBOLS
+                {/* Main Content Area */}
+                <main className="flex-1 flex flex-col relative overflow-hidden">
+                    {/* Top Stats Bar */}
+                    <header className="h-20 border-b border-white/5 bg-slate-950/30 backdrop-blur-md flex items-center justify-between px-10 z-20">
+                        <div className="flex items-center gap-6">
+                            <h1 className="text-xl font-black italic tracking-tighter text-white">RANT AI <span className="text-red-500 font-medium not-italic ml-2 text-sm opacity-50 tracking-[0.3em]">CO-PILOT</span></h1>
+                        </div>
+                        <div className="flex items-center gap-8">
+                            <div className="flex items-center gap-3">
+                                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Global Threat</span>
+                                <div className="flex gap-1">
+                                    <div className="w-3 h-1 bg-emerald-500 rounded-full" />
+                                    <div className="w-3 h-1 bg-emerald-500 rounded-full" />
+                                    <div className="w-3 h-1 bg-slate-700 rounded-full" />
                                 </div>
                             </div>
+                            <StateBadge state={state} />
                         </div>
+                    </header>
 
-                        {/* Controls */}
-                        <div className="flex flex-col sm:flex-row gap-5">
-                            <button
-                                onClick={handleExecute}
-                                disabled={!query || state === "SYSTEM_OFFLINE" || state === "PROCESSING"}
-                                className={`flex-[2.5] py-6 rounded-3xl text-white font-black uppercase tracking-[0.4em] text-xs transition-all duration-500 shadow-2xl active:scale-[0.97] disabled:active:scale-100 ${!query || state === "SYSTEM_OFFLINE" || state === "PROCESSING"
-                                    ? "bg-slate-100 text-slate-300 cursor-not-allowed shadow-none"
-                                    : "bg-red-600 hover:bg-slate-950 shadow-red-600/20"
-                                    }`}
-                            >
-                                <span className="flex items-center justify-center gap-3">
-                                    {state === "PROCESSING" && <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />}
-                                    {state === "PROCESSING" ? "DECIPHERING..." : "DISPATCH SIGNAL"}
-                                </span>
-                            </button>
-                            <button
-                                onClick={() => { setQuery(""); setLastResponse(null); setState("IDLE"); }}
-                                className="flex-1 py-6 bg-white hover:bg-slate-50 text-slate-400 border-[3px] border-slate-50 font-black uppercase tracking-[0.3em] text-[9px] rounded-3xl transition-all duration-300 active:scale-[0.97]"
-                            >
-                                PURGE BUFFER
-                            </button>
+                    {/* Scrollable Workspace */}
+                    <div className="flex-1 overflow-y-auto scroll-smooth custom-scrollbar">
+                        <div className="max-w-5xl mx-auto p-10 space-y-12 pb-40">
+                            {/* Agent Logic Selector */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {AGENTS.map(agent => (
+                                    <button
+                                        key={agent.id}
+                                        onClick={() => setSelectedAgent(agent)}
+                                        className={`group relative p-8 rounded-[2rem] border-2 transition-all duration-500 ${selectedAgent.id === agent.id
+                                            ? "border-red-600/50 bg-red-600/5 shadow-[0_0_50px_rgba(220,38,38,0.1)]"
+                                            : "border-white/5 bg-white/5 hover:border-white/10"
+                                            }`}
+                                    >
+                                        <div className="flex items-center gap-6">
+                                            <div className={`w-14 h-14 rounded-3xl flex items-center justify-center font-black text-xl transition-all ${selectedAgent.id === agent.id ? "bg-red-600 text-white shadow-[0_10px_20px_rgba(220,38,38,0.3)]" : "bg-slate-800 text-slate-500 group-hover:bg-slate-700"}`}>
+                                                {agent.id === "ASK_RANT" ? "A" : "B"}
+                                            </div>
+                                            <div className="text-left">
+                                                <p className={`text-lg font-black tracking-tighter ${selectedAgent.id === agent.id ? "text-white" : "text-slate-400"}`}>{agent.name}</p>
+                                                <p className="text-[10px] text-slate-500 font-black mt-1 tracking-[0.2em] uppercase">
+                                                    {agent.type === 'guidance' ? '○ Educational Mode' : '○ Operational Mode'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Response Display Area */}
+                            {lastResponse && (
+                                <div id="response-anchor" className="space-y-10 animate-in slide-in-from-bottom-10 duration-700">
+                                    <ResponseViewer response={lastResponse} />
+                                </div>
+                            )}
                         </div>
                     </div>
-                </div>
 
-                {/* Response Container */}
-                <div id="response-anchor" className="scroll-mt-10">
-                    <ResponseViewer response={lastResponse} />
-                </div>
-
-                <div className="mt-16 text-center space-y-2">
-                    <div className="w-10 h-0.5 bg-slate-100 mx-auto mb-6" />
-                    <p className="text-slate-300 text-[9px] font-black uppercase tracking-[0.5em]">
-                        CyberRant Enterprise Intelligence Gateway v4.2.1
-                    </p>
-                    <p className="text-slate-200 text-[8px] font-black uppercase tracking-[0.2em]">
-                        Securing Infrastructure for a Post-Human Future
-                    </p>
-                </div>
+                    {/* Bottom Prompt Bar - Fixed and Premium */}
+                    <div className="absolute bottom-0 left-0 right-0 p-10 bg-gradient-to-t from-[#020617] via-[#020617] to-transparent z-10">
+                        <div className="max-w-4xl mx-auto">
+                            <div className="glass-panel p-2 flex items-end gap-4 border-white/10 shadow-2xl">
+                                <div className="flex-1 relative">
+                                    <textarea
+                                        className="w-full bg-transparent border-none p-6 text-sm font-bold text-white placeholder:text-slate-600 outline-none min-h-[60px] max-h-[300px] resize-none"
+                                        placeholder={selectedAgent.id === "ASK_RANT" ? "Ask anything about cybersecurity..." : "Enter operational command (e.g. scan net 10.0.0.1)..."}
+                                        value={query}
+                                        onChange={(e) => setQuery(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                e.preventDefault();
+                                                handleExecute();
+                                            }
+                                        }}
+                                        disabled={state === "PROCESSING"}
+                                    />
+                                    <div className="absolute top-6 left-6 pointer-events-none opacity-0 transition-opacity">
+                                        {/* Animation for typing could go here */}
+                                    </div>
+                                </div>
+                                <div className="flex flex-col gap-2 p-4">
+                                    <button
+                                        onClick={handleExecute}
+                                        disabled={!query || state === "PROCESSING"}
+                                        className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-xl ${!query || state === "PROCESSING" ? "bg-slate-800 text-slate-600 cursor-not-allowed" : "bg-red-600 hover:bg-red-500 text-white shadow-red-600/30 active:scale-90"}`}
+                                    >
+                                        {state === "PROCESSING" ? <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" /> :
+                                            <svg className="w-6 h-6 transform rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                                        }
+                                    </button>
+                                    <button
+                                        onClick={() => { setQuery(""); setLastResponse(null); setState("IDLE"); }}
+                                        className="text-[9px] font-black text-slate-600 uppercase tracking-widest hover:text-white transition-colors"
+                                    >
+                                        Clear
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="mt-4 flex justify-between items-center px-6">
+                                <p className="text-[9px] font-black text-slate-700 uppercase tracking-[0.3em]">
+                                    {selectedAgent.id === "ASK_RANT" ? "Ask Rant AI v3.1 • Learning & Knowledge Engine" : "Action Copilot v4.2 • Task Execution Engine"}
+                                </p>
+                                <div className="flex items-center gap-4">
+                                    <span className="text-[9px] font-black text-slate-500 uppercase">Tokens: {query.length}</span>
+                                    <button onClick={() => setShowCommunity(!showCommunity)} className="text-[9px] font-black text-red-600/60 uppercase tracking-widest hover:text-red-500 transition-colors">
+                                        {showCommunity ? "Hide Community" : "Show Community"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </main>
             </div>
 
             <ApprovalModal

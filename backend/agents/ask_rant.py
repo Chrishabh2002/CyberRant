@@ -24,7 +24,7 @@ class AskRantAgent(BaseAgent):
     Learning & Guidance Agent.
     Implements RAG patterns to provide security advice.
     """
-    def run(self, user_query: str, chat_history: List[Dict[str, str]]) -> str:
+    def run(self, user_query: str, chat_history: List[Dict[str, str]], execution_available: bool = True) -> Dict[str, Any]:
         # 1. Perform Retrieval (Simulated Knowledge Base Context)
         context = self._retrieve_knowledge_base_context(user_query)
         
@@ -55,4 +55,11 @@ class AskRantAgent(BaseAgent):
 
     def _retrieve_knowledge_base_context(self, query: str) -> str:
         # In production, this would call a Vector DB (Pinecone/Milvus)
-        return "Internal Knowledge: Focus on data protection, strong access controls, and regular system hygiene. Security is a shared responsibility across the organization. Emphasize multi-layered defense and early detection of unusual patterns."
+        base_kb = "Internal Knowledge: Focus on data protection, strong access controls, and regular system hygiene. Security is a shared responsibility across the organization. Emphasize multi-layered defense and early detection of unusual patterns."
+        
+        # Simulate Community Intelligence Layer
+        community_context = ""
+        if any(word in query.lower() for word in ["community", "trending", "discussion", "social", "expert"]):
+            community_context = "\n\nCOMMUNITY INTEL: Trending topics include 'Zero-Trust implementation hurdles' and 'AI-driven phishing detection'. Experts recommend focusing on identity security this quarter."
+            
+        return base_kb + community_context

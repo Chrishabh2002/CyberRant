@@ -12,3 +12,6 @@ httpx>=0.23.0,<0.28.0
 gTTS==2.5.4
 opencv-python-headless==4.9.0.80
 numpy==1.26.4
+python-socketio>=5.11.0
+python-engineio>=4.8.0
+async_timeout>=4.0.3

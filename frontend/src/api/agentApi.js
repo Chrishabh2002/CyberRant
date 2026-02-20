@@ -63,5 +63,13 @@ export const agentApi = {
         return await response.json();
     },
 
+    /**
+     * Triggers a sandbox file list request.
+     */
+    async getSandboxFiles(traceId) {
+        const response = await fetch(`${API_BASE_URL}/agent/sandbox/${traceId}`);
+        return await response.json();
+    },
+
     API_BASE_URL
 };

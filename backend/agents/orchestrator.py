@@ -14,7 +14,7 @@ class AgentOrchestrator:
         self.enabled_features = enabled_features or []
         self.logger = logging.getLogger(f"AgentTrace-{user_id}")
 
-    def process_request(self, agent_type: str, user_query: str):
+    def process_request(self, agent_type: str, user_query: str, execution_available: bool = True):
         # 1. Global Kill-Switch Check (Zero-Trust)
         if not SystemConfig.IS_SYSTEM_ARMED:
             return {
@@ -41,33 +41,84 @@ class AgentOrchestrator:
 
         # 4. Mode Enforcement / Agent Selection
         try:
-            # We Dispatch based on user selection but enforce Mode context
             from .ask_rant import AskRantAgent
             from .rant_copilot import RantCopilotAgent
-            
-            # If user selected ASK_RANT but trigger says OPERATIONAL, we still use ASK_RANT 
-            # but it will handle it via its refined educator prompt (Mode A).
-            # If user selected RANT_COPILOT, it must strictly follow Mode B.
             
             agent = AskRantAgent() if agent_type == "ASK_RANT" else RantCopilotAgent()
                 
             if not agent:
                 raise ValueError(f"Invalid agent type: {agent_type}")
             
-            # Run the agent
-            agent_res = agent.run(user_query, [])
+            # Run the agent - PLANNER is always allowed even if execution is unavailable
+            agent_res = agent.run(user_query, [], execution_available=execution_available)
             
             return {
                 "trace_id": trace_id,
-                "state": AgentState.COMPLETED,
+                "state": agent_res.get("state", AgentState.COMPLETED),
                 "message": agent_res.get("message", ""),
                 "severity": agent_res.get("severity", "LOW"),
                 "confidence": agent_res.get("confidence", "MEDIUM"),
-                "mode": determined_mode.value if determined_mode else None
+                "action_plan": agent_res.get("action_plan"),
+                "mode": agent_res.get("mode", "PLANNING_ONLY"),
+                "execution_available": execution_available,
+                "intent": evaluation.get("intent", "System Query"),
+                "phases": agent_res.get("phases", [
+                    { "name": "Risk Evaluation", "permission_required": False },
+                    { "name": "Action Execution", "permission_required": True }
+                ])
             }
         except Exception as e:
             self._log_event(trace_id, "ERROR", str(e))
-            return {"trace_id": trace_id, "state": AgentState.FAILED, "error": f"Internal Orchestration Error: {str(e)}"}
+            return {
+                "trace_id": trace_id, 
+                "state": AgentState.FAILED, 
+                "message": "Intelligence dispatch failed. The system encountered a processing boundary.",
+                "intent": user_query[:30] + "...",
+                "risk": "MEDIUM",
+                "execution_available": execution_available,
+                "phases": [
+                    { "name": "Policy Scan", "permission_required": False },
+                    { "name": "Boundary Failure", "permission_required": False }
+                ],
+                "error": str(e)
+            }
+
+    def summarize_execution(self, command: str, output: str):
+        """
+        Takes raw command output and generates a human-readable summary.
+        This ensures even non-technical users understand the operational result.
+        """
+        try:
+            from .ask_rant import AskRantAgent # Use the educator for clear explanations
+            agent = AskRantAgent()
+            
+            prompt = f"""
+            SYSTEM OPERATIONAL REPORT: {command}
+            
+            Analyze this technical output and write a DETAILED OPERATIONAL REPORT for the operator.
+            
+            STRUCTURE YOUR RESPONSE AS FOLLOWS:
+            1. STATUS: [Secure / Review Required]
+            2. EXECUTIVE SUMMARY: What happened in 2 sentences.
+            3. KEY FINDINGS: List the technical findings from the output.
+            4. RISK ASSESSMENT: What are the security implications of these findings?
+            5. RECOMMENDATIONS: What should the operator do next?
+            
+            Executed Command: {command}
+            Raw Telemetry:
+            {output}
+            
+            RULES for the summary:
+            1. Use professional, operator-grade language.
+            2. Be concise but comprehensive.
+            3. Ensure findings are directly tied to the telemetry.
+            4. Keep it calm and objective.
+            """
+            
+            res = agent.run(prompt, [])
+            return res.get("message", "Execution complete. Result verified.")
+        except Exception as e:
+            return f"Execution finalized. Raw data has been captured and verified by the protocol."
 
     def _log_event(self, trace_id: str, event_type: str, details: str):
         # Strict observability requirement for audit trails

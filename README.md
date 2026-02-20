@@ -3,7 +3,6 @@
 <div align="center">
 
 [![Live Demo](https://img.shields.io/badge/LIVE_DEMO-CyberRant_V--Labs-ED1C24?style=for-the-badge&logo=render&logoColor=white)](https://cyberrant.onrender.com/)
-[![Built with Antigravity](https://img.shields.io/badge/GOVERNANCE-Antigravity_v3.1-blue?style=for-the-badge)](https://github.com/google-deepmind)
 [![License](https://img.shields.io/badge/LICENSE-MIT-green?style=for-the-badge)](LICENSE)
 
 **A calm, executive-grade AI orchestration platform for risk calibration and conceptual security intelligence.**
@@ -16,7 +15,7 @@
 
 ## 🌌 Overview
 
-CyberRant V-Labs is not just an AI assistant; it is a **Governing Intelligence Layer** designed to transform complex cyber threats into clear, actionable, and executive-ready intelligence. Built on the **Antigravity Framework**, it prioritizes stability, trust, and human-centric risk management.
+CyberRant V-Labs is not just an AI assistant; it is a **Governing Intelligence Layer** designed to transform complex cyber threats into clear, actionable, and executive-ready intelligence. Built on the **CyberRant Framework**, it prioritizes stability, trust, and human-centric risk management.
 
 ### 🎭 Dual-Mode Intel Dispatch
 The system automatically determines the operational mode based on natural language intent:
@@ -98,7 +97,7 @@ graph TD
 
 ## 🛡 Governance & Safety
 
-CyberRant V-Labs operates under the **Antigravity v3.1** ruleset:
+CyberRant V-Labs operates under the **CyberRant v3.1** ruleset:
 - **No Attacker Perspective**: The system never generates exploit code or payloads.
 - **Safety Redirection**: Malicious intent is redirected to conceptual prevention training.
 - **Calm Tone**: No flashing red lights or alarmist language—only calibrated risk assessment.

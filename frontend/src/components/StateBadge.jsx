@@ -7,6 +7,7 @@ const stateColors = {
     APPROVAL_REQUIRED: "bg-yellow-100 text-yellow-800 border border-yellow-400",
     PARTIAL_SUCCESS: "bg-purple-100 text-purple-800",
     COMPLETED: "bg-green-100 text-green-800",
+    EXECUTING: "bg-cyan-100 text-cyan-800 animate-pulse",
     BLOCKED: "bg-red-100 text-red-800",
     REFUSED: "bg-orange-100 text-orange-800",
     SYSTEM_OFFLINE: "bg-black text-white",
