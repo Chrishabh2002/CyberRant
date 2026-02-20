@@ -31,8 +31,20 @@ os.makedirs(SANDBOX_DIR, exist_ok=True)
 sio = socketio.AsyncClient(reconnection=True, reconnection_attempts=0, reconnection_delay=1)
 
 class LocalExecutionAgent:
-    def __init__(self, server_url="http://localhost:8000"):
-        self.server_url = server_url
+    def __init__(self, server_url=None):
+        # PRIORITY 1: Command Line Argument
+        # PRIORITY 2: Environment Variable (LEA_SERVER_URL)
+        # PRIORITY 3: Render Internal Discovery (localhost:PORT)
+        # PRIORITY 4: Localhost Default
+        
+        default_url = "http://localhost:8000"
+        
+        # Determine internal port if on Render/Cloud
+        port = os.getenv("PORT", "8000")
+        if os.getenv("RENDER"):
+            default_url = f"http://localhost:{port}"
+
+        self.server_url = server_url or os.getenv("LEA_SERVER_URL") or default_url
         self.agent_id = f"lea-{os.getlogin()}-{int(time.time())}"
 
     async def _start_pulse(self):
@@ -337,7 +349,9 @@ async def on_disconnect():
     print("[!] Disconnected from server. Reconnecting...")
 
 async def main():
-    agent = LocalExecutionAgent()
+    import sys
+    url = sys.argv[1] if len(sys.argv) > 1 else None
+    agent = LocalExecutionAgent(server_url=url)
     await agent.connect()
     await sio.wait()
 

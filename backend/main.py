@@ -35,11 +35,14 @@ async def lifespan(app: FastAPI):
         with open("lea_bridge.log", "w") as f:
             f.write(f"--- BRIDGE INITIALIZED {time.ctime()} ---\n")
             
-        subprocess.Popen([sys.executable, "-u", lea_path], 
+        port = os.getenv("PORT", "8000")
+        target_url = f"http://localhost:{port}"
+        
+        subprocess.Popen([sys.executable, "-u", lea_path, target_url], 
                          stdout=open("lea_bridge.log", "a"), 
                          stderr=subprocess.STDOUT,
                          cwd=project_root)
-        print("[+] Security Bridge initialization sequence started.")
+        print(f"[+] Security Bridge initialization sequence started (Target: {target_url})")
         
     yield
     # Shutdown logic (optional)
