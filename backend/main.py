@@ -27,9 +27,21 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(simulate_ambient_intel())
     
     # Automatically spawn the Local Execution Agent (Security Bridge)
-    project_root = os.path.dirname(os.path.dirname(__file__))
-    lea_path = os.path.join(project_root, "local_agent.py")
-    if os.path.exists(lea_path):
+    # Robust Path Discovery: Check both parent and current directory (for flattened cloud deploys)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    possible_paths = [
+        os.path.join(os.path.dirname(current_dir), "local_agent.py"),
+        os.path.join(current_dir, "local_agent.py")
+    ]
+    
+    lea_path = None
+    for p in possible_paths:
+        if os.path.exists(p):
+            lea_path = p
+            project_root = os.path.dirname(p)
+            break
+
+    if lea_path:
         print(f"[*] Dispatching Security Bridge: {lea_path}")
         # Wipe log for fresh run
         with open("lea_bridge.log", "w") as f:
