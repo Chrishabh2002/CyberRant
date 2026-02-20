@@ -42,19 +42,23 @@ async def lifespan(app: FastAPI):
             break
 
     if lea_path:
-        print(f"[*] Dispatching Security Bridge: {lea_path}")
+        # Give the main server a moment to bind to the port
+        await asyncio.sleep(2)
+        
+        print(f"[*] Dispatching Internal Security Bridge: {lea_path}")
         # Wipe log for fresh run
         with open("lea_bridge.log", "w") as f:
-            f.write(f"--- BRIDGE INITIALIZED {time.ctime()} ---\n")
+            f.write(f"--- INTERNAL BRIDGE INITIALIZED {time.ctime()} ---\n")
             
         port = os.getenv("PORT", "8000")
-        target_url = f"http://localhost:{port}"
+        # Use 127.0.0.1 for internal loopback on cloud providers
+        target_url = f"http://127.0.0.1:{port}"
         
         subprocess.Popen([sys.executable, "-u", lea_path, target_url], 
                          stdout=open("lea_bridge.log", "a"), 
                          stderr=subprocess.STDOUT,
                          cwd=project_root)
-        print(f"[+] Security Bridge initialization sequence started (Target: {target_url})")
+        print(f"[+] Internal Security Bridge dispatched to {target_url}")
         
     yield
     # Shutdown logic (optional)

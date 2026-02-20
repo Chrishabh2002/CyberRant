@@ -76,19 +76,22 @@ class LocalExecutionAgent:
                 await asyncio.sleep(5)
 
     async def connect(self):
-        # Start the telemetry pulse in the background
-        asyncio.create_task(self._start_pulse())
+        """Establishes a persistent connection with the gateway."""
+        print(f"[*] Connecting to CyberRant Gateway at {self.server_url}...")
         
-        while True:
+        connected = False
+        while not connected:
             try:
-                if not sio.connected:
-                    print(f"[*] Connecting to CyberRant Gateway at {self.server_url}...")
-                    await sio.connect(self.server_url, wait_timeout=10)
-                    # Note: registration is now handled by the @sio.on("connect") global handler
-                break
+                # Transports forced to polling first for better cloud handshake compatibility
+                await sio.connect(self.server_url, transports=['polling', 'websocket'])
+                connected = True
+                print(f"[+] Bridge Connection Active: {self.server_url}")
             except Exception as e:
-                print(f"[!] Connection failed: {e}. Retrying in 5s...")
-                await asyncio.sleep(5)
+                print(f"[!] Target Gateway unreachable ({e}). Retrying in 3s...")
+                await asyncio.sleep(3)
+
+        # Launch background tasks
+        asyncio.create_task(self._start_pulse())
 
     @staticmethod
     def _is_safe(command):
