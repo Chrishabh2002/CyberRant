@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
         with open("lea_bridge.log", "w") as f:
             f.write(f"--- BRIDGE INITIALIZED {time.ctime()} ---\n")
             
-        subprocess.Popen([sys.executable, lea_path], 
+        subprocess.Popen([sys.executable, "-u", lea_path], 
                          stdout=open("lea_bridge.log", "a"), 
                          stderr=subprocess.STDOUT,
                          cwd=project_root)
@@ -261,25 +261,37 @@ async def handle_approval(req: ApprovalRequest):
 
         stored_res = trace_store[req.trace_id]
         message = stored_res.get("message", "")
+        action_plan = stored_res.get("action_plan")
         
         import re
         command = "whoami" # Safe fallback
         args = []
-        # Support both the new stylized header and the legacy format
-        patterns = [
-            r"Execution Task\s*:\s*(.*)",
-            r"- Command\(s\) to be executed:\s*(.*)"
-        ]
         
-        for pattern in patterns:
-            cmd_match = re.search(pattern, message, re.IGNORECASE)
-            if cmd_match:
-                full_line = cmd_match.group(1).strip().replace("`", "")
-                parts = full_line.split()
-                if parts:
-                    command = parts[0]
-                    args = parts[1:]
-                    break
+        # PRIORITY 1: Direct extraction from Action Plan Object (Most Reliable)
+        if action_plan and action_plan.get("operation"):
+            full_op = action_plan["operation"].strip().replace("`", "")
+            parts = full_op.split()
+            if parts:
+                command = parts[0]
+                args = parts[1:]
+        else:
+            # PRIORITY 2: Regex parsing from Message String
+            patterns = [
+                r"Execution Task\s*:\s*(.*)",
+                r"- Command\(s\) to be executed:\s*(.*)",
+                r"\[PROBABLE MISSION\]:\s*(.*)",
+                r"Task\s*:\s*(.*)"
+            ]
+            
+            for pattern in patterns:
+                cmd_match = re.search(pattern, message, re.IGNORECASE)
+                if cmd_match:
+                    full_line = cmd_match.group(1).strip().replace("`", "")
+                    parts = full_line.split()
+                    if parts:
+                        command = parts[0]
+                        args = parts[1:]
+                        break
         
         await sio.emit("execute_command", {
             "trace_id": req.trace_id,

@@ -80,24 +80,33 @@ class LocalExecutionAgent:
 
     @staticmethod
     def _is_safe(command):
-        parts = command.split()
-        if not parts: return False
-        base_cmd = parts[0].lower()
+        # 1. Strip surrounding quotes and backticks
+        cmd_clean = command.strip().strip('"').strip("'").strip("`")
         
-        # Tool Mapping for High-Level Definitions
-        TOOL_MAP = {
-            "network_recon": "port_scan.py",
-            "system_audit": "system_audit.py",
-            "list_sandbox_files": "list_sandbox_files" # handled natively
-        }
+        # 2. Extract base command
+        import re
+        parts = cmd_clean.split()
+        if not parts: return False
+        
+        # 3. Aggressive cleanup of the base command
+        base_cmd = re.sub(r'[^a-zA-Z0-9_].*', '', parts[0].lower())
+        
+        print(f"[*] Governance Check: Raw='{command}' | Base='{base_cmd}'")
+        
+        # Comprehensive Tool Mapping & Common Aliases
+        ALLOWED_COMMANDS = [
+            "network_recon", "system_audit", "list_sandbox_files", "quarantine_instance",
+            "ls", "dir", "pwd", "cd", "cat", "type", "echo", "whoami", "ipconfig", "ifconfig",
+            "ping", "netstat", "tasklist", "ps", "grep", "findstr", "find"
+        ]
 
-        # Allow mapped tools
-        if base_cmd in TOOL_MAP:
+        if base_cmd in ALLOWED_COMMANDS:
             return True
 
         # Security Exception: Allow Python if it's running an internal agent tool
-        if base_cmd == "python" and len(parts) > 1:
-            script_path = os.path.abspath(parts[1])
+        if base_cmd in ["python", "python3"] and len(parts) > 1:
+            script_arg = parts[1].strip().strip('"').strip("'").strip("`")
+            script_path = os.path.abspath(script_arg)
             if script_path.startswith(os.path.abspath(BUILTIN_TOOLS_DIR)):
                 return True
 
@@ -136,15 +145,72 @@ class LocalExecutionAgent:
             return
 
         # Advanced Path Normalization & Discovery for Built-in Tools
-        effective_command = command
+        import re
+        # Clean command name for internal branch logic
+        cmd_clean = command.strip().strip('"').strip("'").strip("`")
+        clean_cmd = re.sub(r'[^a-zA-Z0-9_].*', '', cmd_clean.lower())
+        effective_command = clean_cmd
         
-        # Mapping high-level tool names to actual scripts
+        print(f"[*] Executing tactical branch for: {clean_cmd}")
+        
+        # Mapping high-level tool names to actual logic
         TOOL_MAP = {
             "network_recon": "port_scan.py",
-            "system_audit": "system_audit.py"
+            "system_audit": "system_audit.py",
+            "list_sandbox_files": "NATIVE"
         }
 
-        if command.lower() in TOOL_MAP:
+        # CROSS-PLATFORM TRANSLATION LAYER (Windows Support)
+        if os.name == 'nt':
+            # Clean Linux-style flags from common commands
+            clean_args = [a for a in args if not a.startswith("-")]
+            target_path = clean_args[0] if clean_args else "."
+            
+            if clean_cmd == "ls":
+                effective_command = "cmd.exe"
+                effective_args = ["/c", "dir", target_path.replace("/", "\\")]
+                print(f"[*] Translation: ls -> dir {target_path}")
+            elif clean_cmd == "pwd":
+                effective_command = "cmd.exe"
+                effective_args = ["/c", "cd"]
+                print(f"[*] Translation: pwd -> cd")
+            elif clean_cmd == "cat":
+                effective_command = "cmd.exe"
+                effective_args = ["/c", "type", target_path.replace("/", "\\")]
+                print(f"[*] Translation: cat -> type")
+            elif clean_cmd == "grep":
+                effective_command = "findstr"
+                effective_args = args # findstr supports some grep-like flags
+                print(f"[*] Translation: grep -> findstr")
+            elif clean_cmd == "ifconfig":
+                effective_command = "ipconfig"
+                effective_args = []
+                print(f"[*] Translation: ifconfig -> ipconfig")
+            elif clean_cmd == "ps":
+                effective_command = "tasklist"
+                effective_args = []
+                print(f"[*] Translation: ps -> tasklist")
+
+        if clean_cmd in TOOL_MAP:
+            if TOOL_MAP[clean_cmd] == "NATIVE":
+                # Handle native listing
+                await sio.emit("execution_log", {"trace_id": trace_id, "log": "[*] Accessing high-integrity sandbox telemetry...\n"})
+                files = []
+                for f in os.listdir(SANDBOX_DIR):
+                    path = os.path.join(SANDBOX_DIR, f)
+                    files.append(f"{'DIR' if os.path.isdir(path) else 'FILE'} | {f} | {os.path.getsize(path)} bytes")
+                
+                output = "SANDBOX ARTIFACTS:\n" + "\n".join(files)
+                await sio.emit("execution_log", {"trace_id": trace_id, "log": output + "\n"})
+                await sio.emit("execution_report", {
+                    "trace_id": trace_id,
+                    "status": "SUCCESS",
+                    "executed_command": "list_sandbox_files",
+                    "verified_output": output,
+                    "timestamp": datetime.now(timezone.utc).isoformat() + "Z"
+                })
+                return # Done
+                
             import sys
             script_name = TOOL_MAP[command.lower()]
             script_path = os.path.normpath(os.path.join(BUILTIN_TOOLS_DIR, script_name))
