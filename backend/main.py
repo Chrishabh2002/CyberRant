@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
 
     if lea_path:
         # Give the main server a moment to bind to the port
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)
         
         print(f"[*] Dispatching Internal Security Bridge: {lea_path}")
         # Wipe log for fresh run
@@ -51,14 +51,16 @@ async def lifespan(app: FastAPI):
             f.write(f"--- INTERNAL BRIDGE INITIALIZED {time.ctime()} ---\n")
             
         port = os.getenv("PORT", "8000")
-        # Use 127.0.0.1 for internal loopback on cloud providers
+        # Use 127.0.0.1 for internal loopback. If that fails, the agent's retry logic 
+        # will keep trying until the gateway is reachable.
         target_url = f"http://127.0.0.1:{port}"
         
+        # Check if RENDER env is present to adjust PID management
         subprocess.Popen([sys.executable, "-u", lea_path, target_url], 
                          stdout=open("lea_bridge.log", "a"), 
                          stderr=subprocess.STDOUT,
                          cwd=project_root)
-        print(f"[+] Internal Security Bridge dispatched to {target_url}")
+        print(f"[+] Internal Security Bridge heartbeat engaged on {target_url}")
         
     yield
     # Shutdown logic (optional)
@@ -68,6 +70,7 @@ fastapi_app = FastAPI(title="CyberRant Agent API", lifespan=lifespan)
 
 # Initialize Socket.io for LEA connection
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
+# Combined app for Uvicorn
 app = socketio.ASGIApp(sio, fastapi_app)
 
 # Ensure media directory exists and serve it
@@ -79,7 +82,7 @@ except Exception as e:
 
 fastapi_app.mount("/media", StaticFiles(directory="media"), name="media")
 
-# Enable CORS
+# Enable CORS (FastAPI Level)
 fastapi_app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

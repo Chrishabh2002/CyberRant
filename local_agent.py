@@ -71,8 +71,15 @@ class LocalExecutionAgent:
                 
                 if sio.connected:
                     await sio.emit("ecosystem_pulse", stats)
-                await asyncio.sleep(2)
+                await asyncio.sleep(5)
             except Exception as e:
+                # If loop is closing, don't try to sleep or print
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_closed(): break
+                except: break
+                
+                print(f"[!] Pulse failed: {e}. Retrying in 5s...")
                 await asyncio.sleep(5)
 
     async def connect(self):
