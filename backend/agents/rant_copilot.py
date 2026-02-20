@@ -4,6 +4,7 @@ from .tools import CyberRantTools
 from .ask_rant import BaseAgent
 from .models import AgentState
 import os
+import re
 
 class RantCopilotAgent(BaseAgent):
     """
