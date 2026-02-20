@@ -32,20 +32,20 @@ sio = socketio.AsyncClient(reconnection=True, reconnection_attempts=0, reconnect
 
 class LocalExecutionAgent:
     def __init__(self, server_url=None):
-        # PRIORITY 1: Command Line Argument
-        # PRIORITY 2: Environment Variable (LEA_SERVER_URL)
-        # PRIORITY 3: Render Internal Discovery (localhost:PORT)
-        # PRIORITY 4: Localhost Default
-        
         default_url = "http://localhost:8000"
-        
-        # Determine internal port if on Render/Cloud
         port = os.getenv("PORT", "8000")
         if os.getenv("RENDER"):
             default_url = f"http://localhost:{port}"
 
         self.server_url = server_url or os.getenv("LEA_SERVER_URL") or default_url
-        self.agent_id = f"lea-{os.getlogin()}-{int(time.time())}"
+        
+        # SAFE IDENTIFIER: Avoid os.getlogin() which fails in headless/cloud env
+        try:
+            username = os.getlogin()
+        except:
+            username = os.getenv("USER") or os.getenv("USERNAME") or "cloud-node"
+            
+        self.agent_id = f"lea-{username}-{int(time.time())}"
 
     async def _start_pulse(self):
         """Streams live ecosystem telemetry to the gateway."""
@@ -339,8 +339,12 @@ async def on_list_files(data):
 @sio.on("connect")
 async def on_connect():
     print("[+] Socket.io Connection Established.")
-    # Auto-register on every connection/reconnection
-    agent_id = f"lea-{os.getlogin()}"
+    # Use safer ID strategy
+    try:
+        user = os.getlogin()
+    except:
+        user = os.getenv("USER") or "node"
+    agent_id = f"lea-{user}"
     await sio.emit("register_lea", {"agent_id": agent_id, "status": "ONLINE"})
     print(f"[*] Registered with Gateway as: {agent_id}")
 
