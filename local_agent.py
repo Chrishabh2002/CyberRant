@@ -187,7 +187,9 @@ class LocalExecutionAgent:
         TOOL_MAP = {
             "network_recon": "port_scan.py",
             "system_audit": "system_audit.py",
-            "list_sandbox_files": "NATIVE"
+            "list_sandbox_files": "NATIVE",
+            "ipconfig": "ip_discovery.py",
+            "ifconfig": "ip_discovery.py"
         }
 
         # CROSS-PLATFORM TRANSLATION LAYER (Windows Support)
