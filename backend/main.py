@@ -383,10 +383,13 @@ async def handle_approval(req: ApprovalRequest):
             if resolved:
                 command = resolved
                 args = []
-                # Extract args from entity if present
-                entity = action_plan.get("entity", "")
-                if entity and entity.lower() not in ["local system", "local host", "system"]:
-                    args = entity.split()
+                # Only extract args from entity for commands that need a target
+                # Built-in tools (system_audit, network_recon) DON'T need entity args
+                NEEDS_ARGS = ["ping", "ipconfig", "netstat", "hostname", "whoami", "tasklist"]
+                if resolved in NEEDS_ARGS:
+                    entity = action_plan.get("entity", "")
+                    if entity and entity.lower() not in ["local system", "local host", "system", "localhost"]:
+                        args = entity.split()
             else:
                 # Fallback: take first word as command
                 parts = full_op.split()

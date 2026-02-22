@@ -23,7 +23,15 @@ BLOCKLIST = ["rm", "del", "shutdown", "format", "mkfs", "userdel", "kill", "form
 # ==========================================
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 SANDBOX_DIR = os.path.join(PROJECT_ROOT, "agent_sandbox")
+
+# Path resolution: works in BOTH local dev and Docker container
+# Local:  /CyberRant/backend/agents/builtin_tools/
+# Docker: /app/agents/builtin_tools/ (because COPY backend/ . flattens it)
 BUILTIN_TOOLS_DIR = os.path.join(PROJECT_ROOT, "backend", "agents", "builtin_tools")
+if not os.path.isdir(BUILTIN_TOOLS_DIR):
+    BUILTIN_TOOLS_DIR = os.path.join(PROJECT_ROOT, "agents", "builtin_tools")
+    
+print(f"[*] BUILTIN_TOOLS_DIR resolved to: {BUILTIN_TOOLS_DIR} (exists={os.path.isdir(BUILTIN_TOOLS_DIR)})")
 
 # Ensure ecosystem exists
 os.makedirs(SANDBOX_DIR, exist_ok=True)
