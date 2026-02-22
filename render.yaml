@@ -1,0 +1,145 @@
+# =============================================================
+# Render Blueprint — CyberRant Full Production Stack
+# =============================================================
+# This file tells Render how to deploy ALL services together.
+# Place this in the root of your GitHub repo.
+#
+# After pushing to GitHub:
+#   1. Go to https://dashboard.render.com
+#   2. Click "New" → "Blueprint"
+#   3. Connect your GitHub repo
+#   4. Render reads this file and creates everything automatically
+# =============================================================
+
+databases:
+  # ── Primary Application Database ──
+  - name: cyberrant-db
+    plan: free  # Change to 'starter' or 'standard' for production
+    databaseName: cyberrant
+    user: cyberrant_admin
+
+  # ── n8n Internal Database (Stores workflows, credentials, logs) ──
+  - name: n8n-db
+    plan: free
+    databaseName: n8n
+    user: n8n_admin
+
+services:
+  # ── Service 1: CyberRant Backend (FastAPI + LEA) ──
+  - type: web
+    name: rant-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free  # Change to 'starter' for production
+    healthCheckPath: /ping
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: OPENROUTER_API_KEY
+        sync: false  # Set manually in Render dashboard (secret)
+      - key: OPENROUTER_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: DEFAULT_MODEL
+        value: arcee-ai/trinity-large-preview:free
+      - key: DB_HOST
+        fromDatabase:
+          name: cyberrant-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: cyberrant-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: cyberrant-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: cyberrant-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: cyberrant-db
+          property: password
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cyberrant-db
+          property: connectionString
+      # n8n Webhook URL (set after n8n deploys)
+      - key: N8N_WEBHOOK_URL
+        sync: false
+
+  # ── Service 2: n8n Orchestration Engine ──
+  - type: web
+    name: rant-n8n
+    runtime: docker
+    dockerfilePath: ./n8n/Dockerfile
+    dockerContext: ./n8n
+    plan: free  # Change to 'starter' for production
+    disk:
+      name: n8n-data
+      mountPath: /home/node/.n8n
+      sizeGB: 1
+    envVars:
+      - key: N8N_PORT
+        value: 5678
+      - key: N8N_PROTOCOL
+        value: https
+      - key: N8N_ENCRYPTION_KEY
+        generateValue: true  # Render auto-generates a secret
+      - key: N8N_BASIC_AUTH_ACTIVE
+        value: "true"
+      - key: N8N_BASIC_AUTH_USER
+        sync: false  # Set in dashboard
+      - key: N8N_BASIC_AUTH_PASSWORD
+        sync: false  # Set in dashboard
+      - key: WEBHOOK_URL
+        sync: false  # Set to https://rant-n8n.onrender.com/ after deploy
+      # n8n stores its own workflow data in its own DB
+      - key: DB_TYPE
+        value: postgresdb
+      - key: DB_POSTGRESDB_HOST
+        fromDatabase:
+          name: n8n-db
+          property: host
+      - key: DB_POSTGRESDB_PORT
+        fromDatabase:
+          name: n8n-db
+          property: port
+      - key: DB_POSTGRESDB_DATABASE
+        fromDatabase:
+          name: n8n-db
+          property: database
+      - key: DB_POSTGRESDB_USER
+        fromDatabase:
+          name: n8n-db
+          property: user
+      - key: DB_POSTGRESDB_PASSWORD
+        fromDatabase:
+          name: n8n-db
+          property: password
+      # LLM Keys (same as backend)
+      - key: OPENROUTER_API_KEY
+        sync: false
+      # Application DB connection (for n8n workflow PostgreSQL nodes)
+      - key: APP_DB_HOST
+        fromDatabase:
+          name: cyberrant-db
+          property: host
+      - key: APP_DB_PORT
+        fromDatabase:
+          name: cyberrant-db
+          property: port
+      - key: APP_DB_NAME
+        fromDatabase:
+          name: cyberrant-db
+          property: database
+      - key: APP_DB_USER
+        fromDatabase:
+          name: cyberrant-db
+          property: user
+      - key: APP_DB_PASSWORD
+        fromDatabase:
+          name: cyberrant-db
+          property: password

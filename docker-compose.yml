@@ -1,0 +1,94 @@
+# =============================================================
+# CyberRant — Local n8n + PostgreSQL Development Stack
+# =============================================================
+# Run:   docker-compose up -d
+# Stop:  docker-compose down
+# Reset: docker-compose down -v  (deletes all data)
+# =============================================================
+
+services:
+  # ── PostgreSQL Database ──
+  postgres:
+    image: postgres:16-alpine
+    container_name: cyberrant-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cyberrant_admin
+      POSTGRES_PASSWORD: cyberrant_secure_2026
+      POSTGRES_DB: cyberrant
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Auto-run schema on first startup
+      - ./backend/community_intel_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    networks:
+      - cyberrant-net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U cyberrant_admin -d cyberrant" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── n8n Workflow Engine ──
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: cyberrant-n8n
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # n8n Core Config
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      N8N_HOST: localhost
+      WEBHOOK_URL: http://localhost:5678/
+      GENERIC_TIMEZONE: Asia/Kolkata
+      TZ: Asia/Kolkata
+
+      # n8n Basic Auth (Login Protection)
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: admin
+      N8N_BASIC_AUTH_PASSWORD: RantAI@2026
+
+      # n8n Internal Database (stores workflows, credentials, execution logs)
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: cyberrant
+      DB_POSTGRESDB_USER: cyberrant_admin
+      DB_POSTGRESDB_PASSWORD: cyberrant_secure_2026
+      DB_POSTGRESDB_SCHEMA: n8n
+
+      # Encryption key for stored credentials (NEVER change after first run)
+      N8N_ENCRYPTION_KEY: rantai-n8n-encryption-key-2026-prod
+
+      # Execution Settings
+      EXECUTIONS_DATA_SAVE_ON_ERROR: all
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: all
+      EXECUTIONS_DATA_SAVE_ON_PROGRESS: "true"
+      EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: "true"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: 168 # 7 days in hours
+
+      # Logging
+      N8N_LOG_LEVEL: info
+      N8N_LOG_OUTPUT: console
+
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - cyberrant-net
+
+volumes:
+  postgres_data:
+    driver: local
+  n8n_data:
+    driver: local
+
+networks:
+  cyberrant-net:
+    driver: bridge

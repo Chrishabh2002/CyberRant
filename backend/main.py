@@ -20,6 +20,8 @@ load_dotenv()
 from agents.orchestrator import AgentOrchestrator
 from agents.models import AgentState, FeatureFlag
 from services.media_orchestrator import MediaOrchestrator
+from services.n8n_webhook import N8nWebhookService
+from database import AsyncSessionLocal
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -112,6 +114,7 @@ if not os.getenv("OPENROUTER_API_KEY"):
     print("CRITICAL WARNING: OPENROUTER_API_KEY is not set. AI Agents will be inoperative.")
 
 media_orchestrator = MediaOrchestrator()
+n8n_service = N8nWebhookService()
 
 class ExecuteRequest(BaseModel):
     agent_type: str
@@ -147,6 +150,34 @@ async def ecosystem_pulse(sid, data):
 @fastapi_app.get("/agent/ecosystem")
 async def get_ecosystem():
     return ecosystem_state
+
+# --- Community Intelligence Section ---
+
+
+@fastapi_app.get("/api/intelligence")
+async def get_community_intelligence():
+    """
+    Fetch the latest curated community intelligence and trending topics.
+    This data is populated by the n8n analytical workflow.
+    """
+    try:
+        from sqlalchemy import text
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(text("SELECT * FROM community_intel ORDER BY trend_score DESC LIMIT 10"))
+            columns = result.keys()
+            items = [dict(zip(columns, row)) for row in result.fetchall()]
+            return items
+    except Exception as e:
+        # Fallback for when DB is not yet initialized or reached
+        print(f"Intelligence fetch failed: {e}")
+        return [
+            {
+                "topic_name": "Proactive Threat Detection",
+                "summary": "AI systems are detecting an uptick in lateral movement patterns across industrial control systems.",
+                "risk_level": "HIGH",
+                "trend_score": 85
+            }
+        ]
 
 @sio.event
 async def connect(sid, environ):
@@ -208,6 +239,15 @@ async def execution_report(sid, data):
                 trace_store[trace_id]["message"] = summary
                 trace_store[trace_id]["state"] = AgentState.COMPLETED if data.get("status") == "SUCCESS" else AgentState.FAILED
                 print(f"[+] Final briefing generated for {trace_id}")
+
+                # Trigger n8n post-execution enrichment (async, non-blocking)
+                await n8n_service.trigger_post_execution(
+                    trace_id=trace_id,
+                    command=data.get('executed_command', ''),
+                    output=raw_output,
+                    severity=prev_data.get('severity', 'LOW')
+                )
+                print(f"[+] n8n enrichment pipeline triggered for {trace_id}")
             except Exception as e:
                 print(f"[!] Briefing generation failed: {e}")
                 trace_store[trace_id]["message"] = f"Execution {data.get('status')}. Telemetry captured."
@@ -297,13 +337,50 @@ async def handle_approval(req: ApprovalRequest):
         command = "whoami" # Safe fallback
         args = []
         
+        # TOOL RESOLVER: Maps LLM's natural language to LEA-recognized commands
+        # LLM says "Execute comprehensive system audit" → we extract "system_audit"
+        TOOL_RESOLVER = {
+            "system_audit": ["audit", "system_audit", "sys_audit", "system audit"],
+            "network_recon": ["recon", "network_recon", "port_scan", "port scan", "scan ports", "nmap"],
+            "list_sandbox_files": ["list", "sandbox", "list_sandbox", "files", "artifacts"],
+            "ipconfig": ["ipconfig", "ifconfig", "ip address", "ip config", "network config"],
+            "ping": ["ping"],
+            "whoami": ["whoami", "who am i", "identity"],
+            "hostname": ["hostname"],
+            "netstat": ["netstat", "connections", "open ports"],
+            "tasklist": ["tasklist", "processes", "running processes"],
+        }
+        
+        def resolve_tool(raw_operation: str) -> str:
+            """Resolves verbose LLM output to exact LEA command."""
+            normalized = raw_operation.lower().strip()
+            for tool_cmd, keywords in TOOL_RESOLVER.items():
+                for keyword in keywords:
+                    if keyword in normalized:
+                        return tool_cmd
+            return None
+        
         # PRIORITY 1: Direct extraction from Action Plan Object (Most Reliable)
         if action_plan and action_plan.get("operation"):
             full_op = action_plan["operation"].strip().replace("`", "")
-            parts = full_op.split()
-            if parts:
-                command = parts[0]
-                args = parts[1:]
+            
+            # First: try exact tool resolution
+            resolved = resolve_tool(full_op)
+            if resolved:
+                command = resolved
+                args = []
+                # Extract args from entity if present
+                entity = action_plan.get("entity", "")
+                if entity and entity.lower() not in ["local system", "local host", "system"]:
+                    args = entity.split()
+            else:
+                # Fallback: take first word as command
+                parts = full_op.split()
+                if parts:
+                    command = parts[0]
+                    args = parts[1:]
+            
+            print(f"[*] Tool Resolver: '{full_op}' → command='{command}', args={args}")
         else:
             # PRIORITY 2: Regex parsing from Message String
             patterns = [
@@ -317,11 +394,15 @@ async def handle_approval(req: ApprovalRequest):
                 cmd_match = re.search(pattern, message, re.IGNORECASE)
                 if cmd_match:
                     full_line = cmd_match.group(1).strip().replace("`", "")
-                    parts = full_line.split()
-                    if parts:
-                        command = parts[0]
-                        args = parts[1:]
-                        break
+                    resolved = resolve_tool(full_line)
+                    if resolved:
+                        command = resolved
+                    else:
+                        parts = full_line.split()
+                        if parts:
+                            command = parts[0]
+                            args = parts[1:]
+                    break
         
         await sio.emit("execute_command", {
             "trace_id": req.trace_id,

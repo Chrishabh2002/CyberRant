@@ -1,0 +1,394 @@
+{
+    "name": "Rant AI Community Intelligence & Trending Analytics",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "minutes",
+                            "minutesInterval": 30
+                        }
+                    ]
+                }
+            },
+            "id": "n1-schedule-trigger",
+            "name": "Schedule Every 30m",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.1,
+            "position": [
+                220,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT last_processed_id FROM analytics_state WHERE key = 'post_watermark';"
+            },
+            "id": "n2-get-watermark",
+            "name": "Get Watermark",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.4,
+            "position": [
+                440,
+                300
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "REPLACE_WITH_CRED_ID",
+                    "name": "CyberRant DB"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "=SELECT id, author_name, content, likes, comments, shares, sentiment_score, created_at FROM user_posts WHERE id > {{ $json.last_processed_id || 0 }} ORDER BY id ASC LIMIT 1000;"
+            },
+            "id": "n3-fetch-posts",
+            "name": "Fetch New Posts",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.4,
+            "position": [
+                660,
+                300
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "REPLACE_WITH_CRED_ID",
+                    "name": "CyberRant DB"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "mode": "runOnceForEachItem",
+                "jsCode": "// PII Scrubbing — removes emails, IPs, API keys before sending to LLM\nconst sensitivePatterns = {\n  email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g,\n  ip: /\\b\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b/g,\n  apikey: /(?:key|token|auth|secret|password)[-_\\s:='\"]+[a-zA-Z0-9_\\-]{16,}/gi,\n  phone: /\\b\\d{3}[-.]?\\d{3}[-.]?\\d{4}\\b/g\n};\n\nlet content = $input.item.json.content || '';\ncontent = content\n  .replace(sensitivePatterns.email, '[EMAIL_REDACTED]')\n  .replace(sensitivePatterns.ip, '[IP_REDACTED]')\n  .replace(sensitivePatterns.apikey, '[SECRET_REDACTED]')\n  .replace(sensitivePatterns.phone, '[PHONE_REDACTED]');\n\n// Engagement score: weighted formula\nconst likes = $input.item.json.likes || 0;\nconst comments = $input.item.json.comments || 0;\nconst shares = $input.item.json.shares || 0;\nconst engagement_score = (likes * 1) + (comments * 3) + (shares * 5);\n\nreturn {\n  ...$input.item.json,\n  content,\n  engagement_score\n};"
+            },
+            "id": "n4-pii-scrub",
+            "name": "PII Scrub",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                880,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Batch posts into groups of 50 for LLM context window safety\nconst items = $input.all();\nconst batchSize = 50;\nconst batches = [];\n\nfor (let i = 0; i < items.length; i += batchSize) {\n  const batch = items.slice(i, i + batchSize);\n  const maxId = Math.max(...batch.map(b => b.json.id || 0));\n  const totalEngagement = batch.reduce((sum, b) => sum + (b.json.engagement_score || 0), 0);\n  \n  batches.push({\n    json: {\n      posts_text: batch.map(b => `[Post ${b.json.id}] ${b.json.content}`).join('\\n---\\n'),\n      batch_id: Math.floor(i / batchSize),\n      post_count: batch.length,\n      max_post_id: maxId,\n      total_engagement: totalEngagement,\n      avg_engagement: Math.round(totalEngagement / batch.length)\n    }\n  });\n}\n\nif (batches.length === 0) {\n  batches.push({ json: { posts_text: '', post_count: 0, max_post_id: 0, skip: true } });\n}\n\nreturn batches;"
+            },
+            "id": "n5-batcher",
+            "name": "Batch Posts (50)",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1100,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://openrouter.ai/api/v1/chat/completions",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Authorization",
+                            "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "HTTP-Referer",
+                            "value": "https://rantai.app"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"model\": \"google/gemini-2.0-flash-001\",\n  \"temperature\": 0.3,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a cybersecurity intelligence analyst. Analyze community posts and produce ONLY valid JSON. No markdown, no explanation.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Analyze these {{ $json.post_count }} cybersecurity community posts. Cluster them into topics.\\n\\nPosts:\\n{{ $json.posts_text }}\\n\\nReturn ONLY a JSON array:\\n[{\\\"topic_name\\\": \\\"short topic title\\\", \\\"category\\\": \\\"Vulnerability|Phishing|Malware|IAM|CloudSec|Other\\\", \\\"summary\\\": \\\"2-3 sentence summary\\\", \\\"risk_level\\\": \\\"LOW|MEDIUM|HIGH|CRITICAL\\\", \\\"trend_score\\\": 0-100, \\\"post_ids\\\": [1,2,3]}]\"\n    }\n  ]\n}",
+                "options": {
+                    "timeout": 60000,
+                    "retry": {
+                        "maxTries": 3,
+                        "waitBetweenTries": 2000
+                    }
+                }
+            },
+            "id": "n6-openrouter",
+            "name": "OpenRouter Enrichment",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1320,
+                300
+            ],
+            "retryOnFail": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+        },
+        {
+            "parameters": {
+                "jsCode": "// Parse the OpenRouter LLM response into structured cluster objects\nconst response = $input.item.json;\nconst maxPostId = $input.item.json.max_post_id || 0;\n\nlet clusters = [];\n\ntry {\n  // Extract content from OpenAI-compatible response format\n  const rawContent = response.choices?.[0]?.message?.content || '';\n  \n  // Strip markdown code fences if present\n  let cleaned = rawContent.trim();\n  if (cleaned.startsWith('```')) {\n    cleaned = cleaned.replace(/^```(?:json)?\\n?/, '').replace(/\\n?```$/, '');\n  }\n  \n  clusters = JSON.parse(cleaned);\n  \n  if (!Array.isArray(clusters)) {\n    clusters = [clusters];\n  }\n} catch (e) {\n  // Fallback: if LLM returned garbage, create a single generic cluster\n  clusters = [{\n    topic_name: 'Uncategorized Discussion',\n    category: 'Other',\n    summary: 'Posts could not be automatically categorized. Manual review recommended.',\n    risk_level: 'LOW',\n    trend_score: 10,\n    post_ids: []\n  }];\n}\n\n// Emit each cluster as a separate item for downstream DB upsert\nreturn clusters.map(c => ({\n  json: {\n    topic_name: (c.topic_name || 'Unknown').substring(0, 255),\n    category: c.category || 'Other',\n    summary: c.summary || '',\n    risk_level: ['LOW','MEDIUM','HIGH','CRITICAL'].includes(c.risk_level) ? c.risk_level : 'LOW',\n    trend_score: Math.min(Math.max(parseInt(c.trend_score) || 0, 0), 100),\n    is_active: true,\n    max_post_id: maxPostId,\n    engagement_score: $input.item.json.total_engagement || 0\n  }\n}));"
+            },
+            "id": "n7-parse-llm",
+            "name": "Parse LLM JSON",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1540,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "=INSERT INTO community_intel (topic_name, category, summary, risk_level, trend_score, is_active, last_updated)\nVALUES (\n  '{{ $json.topic_name.replace(/'/g, \"''\") }}',\n  '{{ $json.category }}',\n  '{{ $json.summary.replace(/'/g, \"''\").substring(0, 2000) }}',\n  '{{ $json.risk_level }}',\n  {{ $json.trend_score }},\n  true,\n  NOW()\n)\nON CONFLICT (topic_name) DO UPDATE SET\n  summary = EXCLUDED.summary,\n  risk_level = EXCLUDED.risk_level,\n  trend_score = EXCLUDED.trend_score,\n  is_active = true,\n  last_updated = NOW();"
+            },
+            "id": "n8-upsert-intel",
+            "name": "Upsert community_intel",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.4,
+            "position": [
+                1760,
+                220
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "REPLACE_WITH_CRED_ID",
+                    "name": "CyberRant DB"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "=INSERT INTO trend_history (topic_id, engagement_score, velocity_score, snapshot_time)\nSELECT \n  topic_id, \n  {{ $json.engagement_score || 0 }},\n  {{ $json.trend_score || 0 }},\n  NOW()\nFROM community_intel \nWHERE topic_name = '{{ $json.topic_name.replace(/'/g, \"''\") }}';"
+            },
+            "id": "n9-insert-history",
+            "name": "Insert trend_history",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.4,
+            "position": [
+                1760,
+                440
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "REPLACE_WITH_CRED_ID",
+                    "name": "CyberRant DB"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "string": [
+                        {
+                            "value1": "={{ $json.risk_level }}",
+                            "operation": "equals",
+                            "value2": "CRITICAL"
+                        }
+                    ]
+                }
+            },
+            "id": "n10-if-critical",
+            "name": "IF Critical",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                1980,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.SLACK_WEBHOOK_URL || 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL' }}",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"text\": \"🚨 *CRITICAL THREAT DETECTED — Rant AI Intel*\\n*Topic:* {{ $json.topic_name }}\\n*Risk:* {{ $json.risk_level }}\\n*Score:* {{ $json.trend_score }}/100\\n*Summary:* {{ $json.summary }}\"\n}",
+                "options": {}
+            },
+            "id": "n11-slack-alert",
+            "name": "Slack Alert",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                2200,
+                220
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "=UPDATE analytics_state SET last_processed_id = {{ $node['Batch Posts (50)'].json.max_post_id || 0 }}, updated_at = NOW() WHERE key = 'post_watermark';"
+            },
+            "id": "n12-update-watermark",
+            "name": "Update Watermark",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.4,
+            "position": [
+                2200,
+                440
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "REPLACE_WITH_CRED_ID",
+                    "name": "CyberRant DB"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Schedule Every 30m": {
+            "main": [
+                [
+                    {
+                        "node": "Get Watermark",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Watermark": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch New Posts",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch New Posts": {
+            "main": [
+                [
+                    {
+                        "node": "PII Scrub",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "PII Scrub": {
+            "main": [
+                [
+                    {
+                        "node": "Batch Posts (50)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Batch Posts (50)": {
+            "main": [
+                [
+                    {
+                        "node": "OpenRouter Enrichment",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "OpenRouter Enrichment": {
+            "main": [
+                [
+                    {
+                        "node": "Parse LLM JSON",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse LLM JSON": {
+            "main": [
+                [
+                    {
+                        "node": "Upsert community_intel",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Insert trend_history",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Upsert community_intel": {
+            "main": [
+                [
+                    {
+                        "node": "IF Critical",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "IF Critical": {
+            "main": [
+                [
+                    {
+                        "node": "Slack Alert",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Update Watermark",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Slack Alert": {
+            "main": [
+                [
+                    {
+                        "node": "Update Watermark",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1",
+        "saveDataErrorExecution": "all",
+        "saveDataSuccessExecution": "all",
+        "saveManualExecutions": true,
+        "callerPolicy": "workflowsFromSameOwner",
+        "errorWorkflow": ""
+    },
+    "staticData": null,
+    "tags": [
+        {
+            "name": "community-intel"
+        },
+        {
+            "name": "production"
+        },
+        {
+            "name": "analytics"
+        }
+    ],
+    "pinData": {},
+    "versionId": "2.0.0-complete"
+}
