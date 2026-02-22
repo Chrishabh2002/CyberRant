@@ -4,12 +4,18 @@ import json
 import psutil # Assuming psutil is available or we fallback
 
 def audit_system():
+    # Safe user detection (works in Docker containers without TTY)
+    try:
+        user = os.getlogin()
+    except (OSError, AttributeError):
+        user = os.getenv("USER") or os.getenv("USERNAME") or "container-user"
+    
     audit_data = {
         "os": platform.system(),
         "version": platform.version(),
         "architecture": platform.machine(),
-        "processor": platform.processor(),
-        "user": os.getlogin() if hasattr(os, 'getlogin') else "unknown",
+        "processor": platform.processor() or "container-cpu",
+        "user": user,
         "working_dir": os.getcwd()
     }
     
