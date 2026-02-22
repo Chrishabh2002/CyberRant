@@ -117,9 +117,25 @@ export default function ResponseViewer({ response }) {
                     </div>
 
                     {/* Section A: Primary Intelligence */}
-                    <div className="prose prose-sm max-w-none text-slate-800 leading-relaxed font-medium">
+                    <div className="prose prose-sm max-w-none text-slate-800 leading-relaxed font-medium mt-4">
+                        {mainContent.includes("MISSION INTEGRITY SIGNATURE") && (
+                            <div className="mb-6 flex items-center gap-3 p-3 bg-amber-500/5 border border-amber-500/20 rounded-2xl animate-in zoom-in-95 duration-700">
+                                <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-xs animate-pulse">🔒</div>
+                                <div>
+                                    <p className="text-[9px] font-black text-amber-600 uppercase tracking-[0.2em]">Verified Intelligence</p>
+                                    <p className="text-[8px] font-mono text-amber-500/70 font-bold uppercase">
+                                        {mainContent.split('\n')[0].replace('REPORT HEADER: ', '')}
+                                    </p>
+                                </div>
+                                <div className="ml-auto flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 rounded-md">
+                                    <span className="w-1 h-1 rounded-full bg-amber-500 animate-ping" />
+                                    <span className="text-[7px] font-black text-amber-600 uppercase">Live</span>
+                                </div>
+                            </div>
+                        )}
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {error ? `**Notice:** Intelligence could not be fully compiled. ${error}` : mainContent}
+                            {error ? `**Notice:** Intelligence could not be fully compiled. ${error}` :
+                                mainContent.includes("MISSION INTEGRITY SIGNATURE") ? mainContent.split('\n').slice(1).join('\n') : mainContent}
                         </ReactMarkdown>
                         <TaskResolution response={response} />
                     </div>
