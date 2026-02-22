@@ -384,12 +384,14 @@ async def handle_approval(req: ApprovalRequest):
                 command = resolved
                 args = []
                 # Only extract args from entity for commands that need a target
-                # Built-in tools (system_audit, network_recon) DON'T need entity args
-                NEEDS_ARGS = ["ping", "ipconfig", "netstat", "hostname", "whoami", "tasklist"]
+                # network_recon NEEDS args (target, ports). system_audit does NOT.
+                NEEDS_ARGS = ["ping", "ipconfig", "netstat", "hostname", "whoami", "tasklist", "network_recon"]
                 if resolved in NEEDS_ARGS:
                     entity = action_plan.get("entity", "")
                     if entity and entity.lower() not in ["local system", "local host", "system", "localhost"]:
-                        args = entity.split()
+                        # For network_recon, we might need to clean the entity string (e.g., remove commas or colons)
+                        clean_entity = entity.replace(",", " ").replace(":", " ")
+                        args = clean_entity.split()
             else:
                 # Fallback: take first word as command
                 parts = full_op.split()

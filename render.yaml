@@ -67,7 +67,7 @@ services:
           property: connectionString
       # n8n Webhook URL (set after n8n deploys)
       - key: N8N_WEBHOOK_URL
-        sync: false
+        value: https://rant-n8n.onrender.com
 
   # ── Service 2: n8n Orchestration Engine ──
   - type: web

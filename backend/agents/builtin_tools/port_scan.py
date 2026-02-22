@@ -20,12 +20,24 @@ def scan_ports(target, ports):
     return results
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print(json.dumps({"error": "Usage: python port_scan.py <target> <ports_comma_sep>"}))
+    if len(sys.argv) < 2:
+        print(json.dumps({"error": "Usage: python port_scan.py <target> [ports_comma_or_space_sep]"}))
         sys.exit(1)
     
     target = sys.argv[1]
-    ports = [int(p) for p in sys.argv[2].split(",")]
+    raw_ports = sys.argv[2:] if len(sys.argv) > 2 else ["80"]
+    
+    ports = []
+    for p_group in raw_ports:
+        # Handle "80,443" or just "80"
+        for p in p_group.replace(",", " ").split():
+            try:
+                ports.append(int(p))
+            except ValueError:
+                continue
+    
+    if not ports:
+        ports = [80, 443, 22] # Default common ports
     
     try:
         results = scan_ports(target, ports)
