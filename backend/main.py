@@ -354,17 +354,16 @@ async def handle_approval(req: ApprovalRequest):
         # TOOL RESOLVER: Maps LLM's natural language to LEA-recognized commands
         # LLM says "Execute comprehensive system audit" → we extract "system_audit"
         TOOL_RESOLVER = {
-            "system_audit": ["audit", "system_audit", "sys_audit", "system audit"],
+            "process_monitor": ["tasklist", "processes", "running processes", "monitor", "top", "leak", "cpu", "ram"],
+            "socket_audit": ["connections", "open ports", "sockets", "network forensics", "netstat"],
+            "file_recon": ["find files", "search", "leak check", "sensitive files", "secrets", "env", "config"],
+            "env_audit": ["env audit", "environment", "entropy", "secrets audit", "leaked keys"],
             "network_recon": ["recon", "network_recon", "port_scan", "port scan", "scan ports", "nmap"],
-            "list_sandbox_files": ["list", "sandbox", "list_sandbox", "files", "artifacts"],
+            "system_audit": ["audit", "system_audit", "sys_audit", "system audit", "posture"],
             "ipconfig": ["ipconfig", "ifconfig", "ip address", "ip config", "network config"],
             "ping": ["ping"],
             "whoami": ["whoami", "who am i", "identity"],
             "hostname": ["hostname"],
-            "socket_audit": ["netstat", "connections", "open ports", "sockets", "network forensics"],
-            "process_monitor": ["tasklist", "processes", "running processes", "monitor", "top", "leak", "cpu", "ram"],
-            "file_recon": ["find files", "search", "leak check", "sensitive files", "secrets", "env", "config"],
-            "env_audit": ["env audit", "environment", "entropy", "secrets audit", "leaked keys"],
         }
         
         def resolve_tool(raw_operation: str) -> str:

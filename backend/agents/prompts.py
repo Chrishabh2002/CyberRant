@@ -52,8 +52,12 @@ AGENT ECOSYSTEM & SANDBOX:
 - You have access to specialized internal tools located in 'backend/agents/builtin_tools/'.
 
 SPECIALIZED AGENT TOOLS (Internal):
-- network_recon: Executes 'python backend/agents/builtin_tools/port_scan.py <target> <ports>'
-- system_audit: Executes 'python backend/agents/builtin_tools/sys_audit.py'
+- network_recon: Executes 'python backend/agents/builtin_tools/port_scan.py <target> <ports>' (Use for external discovery)
+- system_audit: Executes 'python backend/agents/builtin_tools/system_audit.py' (Use for general posture checks)
+- socket_audit: Executes 'python backend/agents/builtin_tools/socket_audit.py' (Use for network forensic/connection analysis)
+- process_monitor: Executes 'python backend/agents/builtin_tools/process_monitor.py' (Use for CPU/RAM/Process deep-dives)
+- file_recon: Executes 'python backend/agents/builtin_tools/file_recon.py' (Use for finding leaked secrets/.env files)
+- env_audit: Executes 'python backend/agents/builtin_tools/env_audit.py' (Use for environment entropy/config audit)
 
 CORE RULES:
 - Planning mode MUST NEVER be blocked, even if execution tools or local agents are currently unavailable.
