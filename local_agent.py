@@ -189,7 +189,11 @@ class LocalExecutionAgent:
             "system_audit": "system_audit.py",
             "list_sandbox_files": "NATIVE",
             "ipconfig": "ip_discovery.py",
-            "ifconfig": "ip_discovery.py"
+            "ifconfig": "ip_discovery.py",
+            "socket_audit": "socket_audit.py",
+            "process_monitor": "process_monitor.py",
+            "file_recon": "file_recon.py",
+            "env_audit": "env_audit.py"
         }
 
         # CROSS-PLATFORM TRANSLATION LAYER (Windows Support)

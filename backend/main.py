@@ -361,8 +361,10 @@ async def handle_approval(req: ApprovalRequest):
             "ping": ["ping"],
             "whoami": ["whoami", "who am i", "identity"],
             "hostname": ["hostname"],
-            "netstat": ["netstat", "connections", "open ports"],
-            "tasklist": ["tasklist", "processes", "running processes"],
+            "socket_audit": ["netstat", "connections", "open ports", "sockets", "network forensics"],
+            "process_monitor": ["tasklist", "processes", "running processes", "monitor", "top", "leak", "cpu", "ram"],
+            "file_recon": ["find files", "search", "leak check", "sensitive files", "secrets", "env", "config"],
+            "env_audit": ["env audit", "environment", "entropy", "secrets audit", "leaked keys"],
         }
         
         def resolve_tool(raw_operation: str) -> str:
