@@ -48,23 +48,37 @@ async def lifespan(app: FastAPI):
                 break
 
         if lea_path:
-            print(f"[*] Dispatching Autonomous Security Bridge: {lea_path}")
-            
             port = os.getenv("PORT", "8000")
             # In containers, 127.0.0.1 is most reliable for loopback
             target_url = f"http://127.0.0.1:{port}"
             
-            # Pipe output to both a log file AND the main process stdout for Render visibility
-            log_file = open("lea_bridge.log", "a")
-            log_file.write(f"\n--- BRIDGE DISPATCHED: {time.ctime()} ---\n")
+            print(f"[*] Dispatching Autonomous Security Bridge: {lea_path}")
+            print(f"[*] LEA target: {target_url} (PORT={port})")
             
             try:
-                subprocess.Popen(
-                    [sys.executable, "-u", lea_path, target_url], 
-                    stdout=log_file, 
-                    stderr=subprocess.STDOUT, # Merge stderr into the same log
-                    cwd=project_root
-                )
+                # In cloud: inherit stdout so LEA logs appear in Render console
+                # In local: also write to log file for persistence
+                is_cloud = os.getenv("RENDER") or os.getenv("RAILWAY")
+                
+                if is_cloud:
+                    # Cloud: LEA logs go directly to Render's log viewer
+                    subprocess.Popen(
+                        [sys.executable, "-u", lea_path, target_url], 
+                        stdout=sys.stdout, 
+                        stderr=sys.stderr,
+                        cwd=project_root
+                    )
+                else:
+                    # Local: LEA logs go to file (keeps terminal clean)
+                    log_file = open("lea_bridge.log", "a")
+                    log_file.write(f"\n--- BRIDGE DISPATCHED: {time.ctime()} ---\n")
+                    subprocess.Popen(
+                        [sys.executable, "-u", lea_path, target_url], 
+                        stdout=log_file, 
+                        stderr=subprocess.STDOUT,
+                        cwd=project_root
+                    )
+                
                 print(f"[+] Security Bridge logic engaged targeting {target_url}")
             except Exception as e:
                 print(f"[!] Critical failure during bridge orchestration: {e}")

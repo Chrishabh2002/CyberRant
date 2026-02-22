@@ -34,8 +34,7 @@ services:
     plan: free  # Change to 'starter' for production
     healthCheckPath: /ping
     envVars:
-      - key: PORT
-        value: 8000
+      # PORT is auto-assigned by Render — do NOT hardcode it
       - key: OPENROUTER_API_KEY
         sync: false  # Set manually in Render dashboard (secret)
       - key: OPENROUTER_BASE_URL

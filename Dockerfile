@@ -58,5 +58,6 @@ ENV RENDER=true
 EXPOSE 8000
 
 # Start the hardened agent gateway
-# LEA auto-starts via lifespan in main.py (dispatch_security_bridge)
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# MUST use shell form (not exec form) so $PORT is expanded at runtime
+# Render assigns a dynamic PORT — uvicorn MUST listen on it
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
